@@ -10,14 +10,19 @@ from backend.schema import create_engine, create_session_factory
 from backend.reranker import RerankerService
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, END
 from langchain_core.tools import tool
 
 log = structlog.get_logger(__name__)
 
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
 OPENAI_EMBED_MODEL = os.environ.get("OPENAI_EMBED_MODEL", "text-embedding-3-small")
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus")
+raw_url = os.environ.get("DATABASE_URL", "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus")
+if raw_url.startswith("postgres://"):
+    raw_url = raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif raw_url.startswith("postgresql://"):
+    raw_url = raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+DATABASE_URL = raw_url
 InferenceProvider = Literal["openai", "anthropic", "ollama"]
 
 class EmbeddingService:

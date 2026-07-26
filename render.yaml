@@ -25,7 +25,7 @@ services:
     dockerContext: backend
     healthCheckPath: /api/health
     preDeployCommand: alembic upgrade head
-    dockerCommand: uvicorn main:app --host 0.0.0.0 --port 8000
+    dockerCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -53,7 +53,7 @@ services:
     env: docker
     dockerfilePath: Dockerfile
     dockerContext: backend
-    dockerCommand: celery -A ingestion_worker.celery_app worker --loglevel=info --concurrency=2
+    dockerCommand: celery -A backend.ingestion_worker.celery_app worker --loglevel=info --concurrency=2
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -84,7 +84,7 @@ services:
     env: docker
     dockerfilePath: Dockerfile
     dockerContext: backend
-    dockerCommand: celery -A ingestion_worker.celery_app beat --loglevel=info
+    dockerCommand: celery -A backend.ingestion_worker.celery_app beat --loglevel=info
     envVars:
       - key: DATABASE_URL
         fromDatabase:
