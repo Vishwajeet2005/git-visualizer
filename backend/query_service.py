@@ -37,7 +37,6 @@ from backend.models.vector_schema import (
     SPARSE_VECTOR_NAME,
     CodeChunkPayload,
 )
-from backend.workers.bm25_index import BM25Indexer
 
 log = structlog.get_logger(__name__)
 
@@ -67,10 +66,13 @@ class EmbeddingService:
     Selects based on EMBED_PROVIDER env var.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, api_key: Optional[str] = None) -> None:
         self._provider = os.environ.get("EMBED_PROVIDER", "openai")
         if self._provider == "openai":
-            self._client   = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+            key = api_key or os.environ.get("OPENAI_API_KEY")
+            if not key:
+                raise ValueError("OPENAI_API_KEY is not set or provided")
+            self._client   = AsyncOpenAI(api_key=key)
             self.model_name = OPENAI_EMBED_MODEL
             self.dense_dim  = 1536
         else:
@@ -349,8 +351,9 @@ class InferenceEngine:
       - Local path (Ollama): sliding context window to fit within ctx budget.
     """
 
-    def __init__(self) -> None:
-        self._openai = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+    def __init__(self, api_key: Optional[str] = None) -> None:
+        key = api_key or os.environ.get("OPENAI_API_KEY", "")
+        self._openai = AsyncOpenAI(api_key=key)
         self._http   = httpx.AsyncClient(timeout=120.0)
 
     async def stream(
@@ -496,16 +499,16 @@ class QueryService:
     Combines hybrid search → dependency expansion → context assembly → inference.
     """
 
-    def __init__(self) -> None:
-        self._embedder = EmbeddingService()
+    def __init__(self, api_key: Optional[str] = None) -> None:
+        self._embedder = EmbeddingService(api_key=api_key)
         self._bm25     = BM25Indexer()
         self._qdrant   = AsyncQdrantClient(
-            url=os.environ["QDRANT_URL"],
+            url=os.environ.get("QDRANT_URL", "http://qdrant:6333"),
             api_key=os.environ.get("QDRANT_API_KEY"),
         )
         self._search  = HybridSearchService(self._qdrant, self._embedder, self._bm25)
         self._router  = RAGRouter(self._qdrant, self._search)
-        self._engine  = InferenceEngine()
+        self._engine  = InferenceEngine(api_key=api_key)
 
     async def query(
         self,

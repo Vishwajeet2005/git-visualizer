@@ -25,24 +25,24 @@ from qdrant_client.http.models import PointStruct
 from qdrant_client.http.models import SparseVector
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.schema import (
+from backend.schema import (
     FileNode,
     Language,
     NodeType,
     Repository,
     RepoStatus,
+    User,
     create_engine,
     create_session_factory,
 )
-from backend.models.vector_schema import (
+from backend.vector_schema import (
     DENSE_VECTOR_NAME,
     SPARSE_VECTOR_NAME,
     CodeChunkPayload,
     create_repo_collection,
 )
-from backend.workers.ast_chunker import ASTChunker, CodeChunk
-from backend.workers.embedder import EmbeddingService
-from backend.workers.bm25_index import BM25Indexer
+from backend.ast_chunker import ASTChunker, CodeChunk
+from backend.query_service import EmbeddingService, BM25Indexer
 
 log = structlog.get_logger(__name__)
 
@@ -113,11 +113,7 @@ class NexusTask(Task):
             )
         return self._qdrant
 
-    @property
-    def embedder(self) -> EmbeddingService:
-        if self._embedder is None:
-            self._embedder = EmbeddingService()
-        return self._embedder
+    # Removed embedder property; EmbeddingService is instantiated per-task
 
     @property
     def chunker(self) -> ASTChunker:
@@ -168,6 +164,15 @@ async def _run_ingestion(
         if repo is None:
             raise Reject(f"Repository {repository_id} not found", requeue=False)
 
+        user: Optional[User] = await session.get(User, repo.owner_id)
+        api_key = None
+        if user and user.openai_api_key_enc and user.openai_api_key_iv and user.openai_api_key_tag:
+            from backend.security import TokenEncryptor
+            encryptor = TokenEncryptor()
+            api_key = encryptor.decrypt(user.openai_api_key_enc, user.openai_api_key_iv, user.openai_api_key_tag)
+
+        embedder = EmbeddingService(api_key=api_key)
+
         try:
             # ── Phase 1: Update status → CLONING ──────────────────────────
             await _set_status(session, repo, RepoStatus.CLONING)
@@ -195,7 +200,7 @@ async def _run_ingestion(
             await create_repo_collection(
                 client=task.qdrant,
                 collection_name=collection_name,
-                dense_dim=task.embedder.dense_dim,
+                dense_dim=embedder.dense_dim,
             )
 
             # ── Phase 3: Parse + chunk all files ──────────────────────────
@@ -224,6 +229,7 @@ async def _run_ingestion(
             file_node_rows = await _embed_and_index(
                 task=task,
                 session=session,
+                embedder=embedder,
                 chunks=all_chunks,
                 collection_name=collection_name,
                 repository_id=repository_id,
@@ -271,6 +277,7 @@ async def _run_ingestion(
 async def _embed_and_index(
     task: NexusTask,
     session: AsyncSession,
+    embedder: EmbeddingService,
     chunks: list[CodeChunk],
     collection_name: str,
     repository_id: str,
@@ -290,7 +297,7 @@ async def _embed_and_index(
         batch = chunks[batch_start:batch_start + UPSERT_BATCH_SIZE]
         texts = [c.raw_content for c in batch]
 
-        dense_vectors  = await task.embedder.embed_batch(texts)
+        dense_vectors = await embedder.embed_batch(texts)
         sparse_vectors = task.bm25.vectorize_batch(texts)
 
         points: list[PointStruct] = []
@@ -314,8 +321,8 @@ async def _embed_and_index(
                 inward_callers=chunk.inward_callers,
                 outward_calls=chunk.outward_calls,
                 token_count=chunk.token_count,
-                embedding_model=task.embedder.model_name,
-                embedding_dim=task.embedder.dense_dim,
+                embedding_model=embedder.model_name,
+                embedding_dim=embedder.dense_dim,
                 last_commit_sha=last_sha,
             )
 
