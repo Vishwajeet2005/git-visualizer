@@ -65,7 +65,7 @@ def make_prune_task(celery_app: Celery, db_factory) -> None:
 
 
 async def _run_prune(db_factory) -> dict:
-    from backend.models.schema import Repository, RepoStatus
+    from backend.schema import Repository, RepoStatus
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
 

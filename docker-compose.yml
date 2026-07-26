@@ -110,7 +110,7 @@ services:
         limits:
           memory: 1g
     command: >
-      uvicorn backend.main:app
+      uvicorn main:app
       --host 0.0.0.0
       --port 8000
       --workers 2
@@ -141,7 +141,7 @@ services:
         limits:
           memory: 2g
     command: >
-      celery -A backend.workers.ingestion_worker.celery_app worker
+      celery -A ingestion_worker.celery_app worker
       --loglevel=info
       --concurrency=2
       --queues=ingestion,default
@@ -165,7 +165,7 @@ services:
     networks:
       - nexus_internal
     command: >
-      celery -A backend.workers.ingestion_worker.celery_app beat
+      celery -A ingestion_worker.celery_app beat
       --loglevel=info
       --scheduler django_celery_beat.schedulers:DatabaseScheduler
 

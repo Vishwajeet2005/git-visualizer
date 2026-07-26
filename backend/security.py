@@ -138,7 +138,7 @@ class CredentialPurgeService:
         """
         from datetime import datetime, timezone
         from sqlalchemy import update, and_
-        from backend.models.schema import User
+        from backend.schema import User
 
         now = datetime.now(timezone.utc)
         stmt = (

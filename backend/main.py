@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.schema import (
+from backend.schema import (
     Repository,
     RepoStatus,
     User,

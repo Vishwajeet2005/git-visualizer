@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.schema import FileNode, Repository, RepoStatus
+from backend.schema import FileNode, Repository, RepoStatus
 
 router = APIRouter(prefix="/api/repos", tags=["graph"])
 

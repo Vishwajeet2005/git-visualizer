@@ -29,7 +29,7 @@ FROM python:3.11-slim AS production
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-WORKDIR /app
+WORKDIR /app/backend
 
 # Runtime system deps only
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -49,6 +49,7 @@ RUN pip install --no-cache-dir --no-index --find-links /wheels -r requirements.t
 
 # Copy application source
 COPY --chown=nexus:nexus . .
+ENV PYTHONPATH=/app
 
 # Pre-download tree-sitter language grammars at build time
 RUN python -c "from tree_sitter_languages import get_parser; get_parser('python'); get_parser('typescript')"

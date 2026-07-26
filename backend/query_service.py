@@ -1,6 +1,6 @@
 import os
 import uuid
-from typing import AsyncIterator, Optional, List
+from typing import AsyncIterator, Optional, List, Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from openai import AsyncOpenAI
@@ -17,7 +17,8 @@ log = structlog.get_logger(__name__)
 
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
 OPENAI_EMBED_MODEL = os.environ.get("OPENAI_EMBED_MODEL", "text-embedding-3-small")
-DATABASE_URL = os.environ["DATABASE_URL"]
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus")
+InferenceProvider = Literal["openai", "anthropic", "ollama"]
 
 class EmbeddingService:
     def __init__(self, api_key: Optional[str] = None) -> None:
