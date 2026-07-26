@@ -456,38 +456,24 @@ export default function DashboardPage() {
     setGraphData({ nodes: mockNodes, links: mockLinks });
   }, [activeRepo]);
 
-  // ── Graph node click → Impact Analysis Mode ─────────────────────────────────
-  const handleNodeClick = useCallback(
-    (node: GraphNode) => {
-      if (highlightedNodes.has(node.id)) {
-        setHighlightedNodes(new Set());
-        return;
-      }
-      // BFS to find connected neighbours
-      const connected = new Set<string>([node.id]);
-      for (const link of graphData.links) {
-        const src = typeof link.source === "object" ? (link.source as any).id : link.source;
-        const tgt = typeof link.target === "object" ? (link.target as any).id : link.target;
-        if (src === node.id) connected.add(tgt);
-        if (tgt === node.id) connected.add(src);
-      }
-      setHighlightedNodes(connected);
-    },
-    [graphData.links, highlightedNodes]
-  );
-
   // ── Send chat message ───────────────────────────────────────────────────────
-  const handleSend = useCallback(async () => {
-    if (!chatInput.trim() || !activeRepo || chatLoading) return;
+  const handleSend = useCallback(async (overrideInput?: string) => {
+    // Determine the actual prompt to send
+    const textToSend = typeof overrideInput === "string" ? overrideInput : chatInput;
+    if (!textToSend.trim() || !activeRepo || chatLoading) return;
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: chatInput,
+      content: textToSend,
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, userMsg]);
-    setChatInput("");
+    
+    // Only clear input if we used the main chat bar
+    if (typeof overrideInput !== "string") {
+      setChatInput("");
+    }
     setChatLoading(true);
 
     const assistantId = crypto.randomUUID();
@@ -506,7 +492,7 @@ export default function DashboardPage() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          question: chatInput,
+          question: textToSend,
           repository_id: activeRepo.id,
           provider: "openai",
         }),
@@ -549,13 +535,42 @@ export default function DashboardPage() {
     }
   }, [chatInput, activeRepo, chatLoading]);
 
+  // ── Graph node click → Impact Analysis Mode + Explain ─────────────────────────
+  const handleNodeClick = useCallback(
+    (node: GraphNode) => {
+      if (highlightedNodes.has(node.id)) {
+        setHighlightedNodes(new Set());
+      } else {
+        // BFS to find connected neighbours
+        const connected = new Set<string>([node.id]);
+        for (const link of graphData.links) {
+          const src = typeof link.source === "object" ? (link.source as any).id : link.source;
+          const tgt = typeof link.target === "object" ? (link.target as any).id : link.target;
+          if (src === node.id) connected.add(tgt);
+          if (tgt === node.id) connected.add(src);
+        }
+        setHighlightedNodes(connected);
+      }
+      
+      // Auto-explain the node
+      handleSend(`Explain the code in ${node.file_path} focusing on ${node.name}`);
+    },
+    [graphData.links, highlightedNodes, handleSend]
+  );
+
+  // ── File Tree Select → Explain ──────────────────────────────────────────────
+  const handleFileSelect = useCallback((file: FileNode) => {
+    setActiveFile(file);
+    if (file.type === "file") {
+      handleSend(`Explain the code in ${file.path}`);
+    }
+  }, [handleSend]);
+
   // ── Generate tests ──────────────────────────────────────────────────────────
   const handleGenerateTests = useCallback(async () => {
     if (!activeFile || !activeRepo) return;
-    setChatInput("");
     const prompt = `Generate a complete unit test suite for ${activeFile.name}`;
-    setChatInput(prompt);
-    handleSend();
+    handleSend(prompt);
   }, [activeFile, activeRepo, handleSend]);
 
   // ── Refactor diff ───────────────────────────────────────────────────────────
@@ -693,7 +708,7 @@ export default function DashboardPage() {
               key={node.id}
               node={node}
               depth={0}
-              onSelect={setActiveFile}
+              onSelect={handleFileSelect}
               selected={activeFile?.id ?? null}
             />
           ))}
