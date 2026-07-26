@@ -1,6 +1,5 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   // Needed for the standalone Docker image
   output: "standalone",
 
@@ -62,8 +61,9 @@ const nextConfig: NextConfig = {
     // Treat canvas as external (not available in Node, used by Three.js tests)
     config.externals = [
       ...(config.externals ?? []),
-      ({ request }: { request: string }, callback: Function) => {
-        if (request === "canvas") return callback(null, "commonjs canvas");
+      (context, callback) => {
+        // Updated webpack 5 signature: (context, callback) where context contains request
+        if (context.request === "canvas") return callback(null, "commonjs canvas");
         callback();
       },
     ];
