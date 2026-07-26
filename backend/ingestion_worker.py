@@ -20,9 +20,7 @@ import structlog
 from celery import Celery, Task, states
 from celery.exceptions import Reject
 from git import GitCommandError, InvalidGitRepositoryError, Repo
-from qdrant_client import AsyncQdrantClient
-from qdrant_client.http.models import PointStruct
-from qdrant_client.http.models import SparseVector
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.schema import (
@@ -35,12 +33,7 @@ from backend.schema import (
     create_engine,
     create_session_factory,
 )
-from backend.vector_schema import (
-    DENSE_VECTOR_NAME,
-    SPARSE_VECTOR_NAME,
-    CodeChunkPayload,
-    create_repo_collection,
-)
+from backend.schema import VectorChunk
 from backend.ast_chunker import ASTChunker, CodeChunk
 from backend.query_service import EmbeddingService, BM25Indexer
 
@@ -91,7 +84,7 @@ class NexusTask(Task):
     Avoids re-initialising connections on every task call.
     """
     _db_factory = None
-    _qdrant: Optional[AsyncQdrantClient] = None
+    _db_factory = None
     _embedder: Optional[EmbeddingService] = None
     _chunker: Optional[ASTChunker] = None
     _bm25: Optional[BM25Indexer] = None
@@ -103,15 +96,7 @@ class NexusTask(Task):
             self._db_factory = create_session_factory(engine)
         return self._db_factory
 
-    @property
-    def qdrant(self) -> AsyncQdrantClient:
-        if self._qdrant is None:
-            self._qdrant = AsyncQdrantClient(
-                url=os.environ["QDRANT_URL"],
-                api_key=os.environ.get("QDRANT_API_KEY"),
-                timeout=30,
-            )
-        return self._qdrant
+
 
     # Removed embedder property; EmbeddingService is instantiated per-task
 
@@ -192,16 +177,7 @@ async def _run_ingestion(
             last_sha = git_repo.head.commit.hexsha
             repo.last_commit_sha = last_sha
 
-            # ── Phase 2: Ensure Qdrant collection ─────────────────────────
-            collection_name = f"repo_{repository_id.replace('-', '')}"
-            repo.vector_collection = collection_name
-            await session.flush()
 
-            await create_repo_collection(
-                client=task.qdrant,
-                collection_name=collection_name,
-                dense_dim=embedder.dense_dim,
-            )
 
             # ── Phase 3: Parse + chunk all files ──────────────────────────
             await _set_status(session, repo, RepoStatus.PARSING)
@@ -228,16 +204,48 @@ async def _run_ingestion(
 
             file_node_rows = await _embed_and_index(
                 task=task,
-                session=session,
                 embedder=embedder,
                 chunks=all_chunks,
-                collection_name=collection_name,
                 repository_id=repository_id,
                 repo_uuid=repo_uuid,
                 last_sha=last_sha,
             )
 
             session.add_all(file_node_rows)
+            # Create vector chunks for pgvector
+            for node in file_node_rows:
+                # We appended chunk data directly to the node temporarily
+                chunk_obj = getattr(node, "_tmp_chunk")
+                dense_vec = getattr(node, "_tmp_dense_vec")
+                sparse_vec = getattr(node, "_tmp_sparse_vec")
+                
+                # Format sparse vector for TSVECTOR
+                # indices and values need to be mapped if possible, 
+                # but pgvector doesn't support sparse vectors directly via TSVECTOR.
+                # Since TSVECTOR is for text search, we should extract the text or BM25 terms.
+                # Actually, in schema.py we defined sparse_vector as TSVECTOR.
+                # Let's just store the raw text as vector_chunks raw_content for Postgres text search later
+                # and drop BM25 sparse_vectors from Qdrant.
+                # We can construct the VectorChunk row now:
+                vchunk = VectorChunk(
+                    id=node.id,
+                    file_node_id=node.id,
+                    repository_id=repo_uuid,
+                    element_type=chunk_obj.node_type if chunk_obj.node_type in [n.value for n in NodeType] else "block",
+                    language=chunk_obj.language if chunk_obj.language in [l.value for l in Language] else "python",
+                    name=chunk_obj.name,
+                    file_path=chunk_obj.file_path,
+                    inward_callers=chunk_obj.inward_callers,
+                    outward_calls=chunk_obj.outward_calls,
+                    raw_content=chunk_obj.raw_content,
+                    token_count=chunk_obj.token_count,
+                    embedding_model=embedder.model_name,
+                    embedding_dim=embedder.dense_dim,
+                    last_commit_sha=last_sha,
+                    dense_vector=dense_vec,
+                    sparse_vector=None, # PostgreSQL text search will use tsvector(raw_content) triggered automatically or on query
+                )
+                session.add(vchunk)
 
             # ── Phase 5: Mark READY ───────────────────────────────────────
             from datetime import datetime, timezone
@@ -276,10 +284,8 @@ async def _run_ingestion(
 
 async def _embed_and_index(
     task: NexusTask,
-    session: AsyncSession,
     embedder: EmbeddingService,
     chunks: list[CodeChunk],
-    collection_name: str,
     repository_id: str,
     repo_uuid: uuid.UUID,
     last_sha: str,
@@ -287,9 +293,7 @@ async def _embed_and_index(
     """
     For each batch of chunks:
     1. Compute dense embeddings via EmbeddingService.
-    2. Compute sparse BM25 vectors via BM25Indexer.
-    3. Upsert into Qdrant.
-    4. Build FileNode ORM rows for PostgreSQL.
+    2. Build FileNode ORM rows for PostgreSQL.
     """
     file_node_rows: list[FileNode] = []
 
@@ -298,49 +302,14 @@ async def _embed_and_index(
         texts = [c.raw_content for c in batch]
 
         dense_vectors = await embedder.embed_batch(texts)
-        sparse_vectors = task.bm25.vectorize_batch(texts)
+        # We don't need BM25 sparse vectors anymore, pgvector / Postgres text search will handle it
 
-        points: list[PointStruct] = []
-
-        for chunk, dense_vec, sparse_vec in zip(batch, dense_vectors, sparse_vectors):
-            point_id = str(uuid.uuid4())
-            payload  = CodeChunkPayload(
-                point_id=point_id,
-                file_node_id=point_id,           # will be set after SQL insert
-                repository_id=repository_id,
-                element_type=chunk.node_type,     # type: ignore[arg-type]
-                language=chunk.language,           # type: ignore[arg-type]
-                file_path=chunk.file_path,
-                start_line=chunk.start_line,
-                end_line=chunk.end_line,
-                code_hash=chunk.code_hash,
-                chunk_content=chunk.raw_content,
-                name=chunk.name,
-                parent_name=chunk.parent_name,
-                imports=chunk.imports,
-                inward_callers=chunk.inward_callers,
-                outward_calls=chunk.outward_calls,
-                token_count=chunk.token_count,
-                embedding_model=embedder.model_name,
-                embedding_dim=embedder.dense_dim,
-                last_commit_sha=last_sha,
-            )
-
-            points.append(PointStruct(
-                id=point_id,
-                vector={
-                    DENSE_VECTOR_NAME:  dense_vec,
-                    SPARSE_VECTOR_NAME: SparseVector(
-                        indices=sparse_vec["indices"],
-                        values=sparse_vec["values"],
-                    ),
-                },
-                payload=payload.to_qdrant_payload(),
-            ))
-
+        for chunk, dense_vec in zip(batch, dense_vectors):
+            point_id = uuid.uuid4()
+            
             # Build ORM row
-            file_node_rows.append(FileNode(
-                id=uuid.UUID(point_id),
+            node = FileNode(
+                id=point_id,
                 repository_id=repo_uuid,
                 file_path=chunk.file_path,
                 language=Language(chunk.language if chunk.language in [l.value for l in Language] else "python"),
@@ -355,15 +324,17 @@ async def _embed_and_index(
                 imports={"items": chunk.imports},
                 inward_callers={"items": chunk.inward_callers},
                 outward_calls={"items": chunk.outward_calls},
-                vector_point_id=uuid.UUID(point_id),
-            ))
+                vector_point_id=point_id,
+            )
+            
+            # Attach temporary data for the caller to create VectorChunk
+            node._tmp_chunk = chunk
+            node._tmp_dense_vec = dense_vec
+            node._tmp_sparse_vec = None
+            
+            file_node_rows.append(node)
 
-        await task.qdrant.upsert(
-            collection_name=collection_name,
-            points=points,
-            wait=True,
-        )
-        log.debug("Upserted batch", size=len(batch), collection=collection_name)
+        log.debug("Embedded batch", size=len(batch))
 
     return file_node_rows
 
