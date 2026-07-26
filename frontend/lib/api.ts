@@ -133,7 +133,7 @@ async function* streamSSE(
     credentials: "include",
     headers:     { "Content-Type": "application/json" },
     body:        JSON.stringify(body),
-    signal,
+    ...(signal ? { signal } : {}),
   });
 
   if (!res.ok || !res.body) {
