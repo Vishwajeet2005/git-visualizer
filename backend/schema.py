@@ -24,7 +24,8 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID, TSVECTOR
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -335,4 +336,47 @@ class UserConversation(Base):
         Index("ix_conversations_user_id", "user_id"),
         Index("ix_conversations_repo_id", "repository_id"),
         Index("ix_conversations_updated_at", "updated_at"),
+    )
+
+# ─── Vector DB Chunks ─────────────────────────────────────────────────────────
+
+class VectorChunk(Base):
+    """
+    Replaces Qdrant. Stores code chunks with dense embeddings (pgvector)
+    and sparse search capability (tsvector).
+    """
+    __tablename__ = "vector_chunks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    file_node_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("file_nodes.id", ondelete="CASCADE"), index=True)
+    repository_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("repositories.id", ondelete="CASCADE"), index=True)
+
+    # Core attributes
+    element_type: Mapped[str] = mapped_column(String(50), nullable=False) # function, class, etc.
+    language: Mapped[str] = mapped_column(String(50), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_path: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Relationships (AST derived)
+    inward_callers: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+    outward_calls: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+
+    # Raw content and metrics
+    raw_content: Mapped[str] = mapped_column(Text, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, default=0)
+    embedding_model: Mapped[str] = mapped_column(String(100), nullable=False)
+    embedding_dim: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_commit_sha: Mapped[str] = mapped_column(String(40), nullable=False)
+
+    # Vector representations
+    dense_vector = mapped_column(Vector(1536), nullable=False)
+    sparse_vector = mapped_column(TSVECTOR, nullable=True)
+
+    # Relationships
+    file_node: Mapped["FileNode"] = relationship("FileNode")
+    repository: Mapped["Repository"] = relationship("Repository")
+
+    __table_args__ = (
+        Index("ix_vector_chunks_repo_id", "repository_id"),
+        Index("ix_vector_chunks_file_id", "file_node_id"),
     )
