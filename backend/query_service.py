@@ -232,9 +232,9 @@ class QueryService:
         
         sp = system_prompt or (
             "You are a senior software engineer Agent equipped with tools to search a codebase. "
-            "Use the search_codebase tool to find relevant code snippets. "
-            "Use ead_file to read the full context if snippets are not enough. "
-            "Use get_symbol_graph to find function callers and dependencies. "
+            "Use the `search_codebase` tool to find relevant code snippets. "
+            "Use `read_file` to read the full context if snippets are not enough. "
+            "Use `get_symbol_graph` to find function callers and dependencies. "
             "Cite file paths and line numbers. Be precise."
         )
         
