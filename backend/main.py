@@ -34,9 +34,9 @@ from backend.models.schema import (
     create_engine,
     create_session_factory,
 )
-from backend.retrieval.query_service import QueryService, InferenceProvider
-from backend.workers.ingestion_worker import celery_app, ingest_repository
-from backend.workers.security import CredentialPurgeService, RateLimiter, TokenEncryptor
+from backend.query_service import QueryService, InferenceProvider
+from backend.ingestion_worker import celery_app, ingest_repository
+from backend.security import CredentialPurgeService, RateLimiter, TokenEncryptor
 
 log = structlog.get_logger(__name__)
 
@@ -55,12 +55,10 @@ async def lifespan(app: FastAPI):
     db_factory = create_session_factory(engine)
     encryptor  = TokenEncryptor()
     limiter    = RateLimiter(redis_url=REDIS_URL, capacity=60, refill_rate=1.0)
-    query_svc  = QueryService()
 
     app.state.db_factory = db_factory
     app.state.encryptor  = encryptor
     app.state.limiter    = limiter
-    app.state.query_svc  = query_svc
 
     yield
 
@@ -116,6 +114,13 @@ async def get_current_user(
     return user
 
 
+def get_user_openai_key(user: User) -> Optional[str]:
+    if not user.openai_api_key_enc or not user.openai_api_key_iv or not user.openai_api_key_tag:
+        return None
+    from backend.security import TokenEncryptor
+    encryptor = TokenEncryptor()
+    return encryptor.decrypt(user.openai_api_key_enc, user.openai_api_key_iv, user.openai_api_key_tag)
+
 async def rate_limit(
     request: Request,
     user: User = Depends(get_current_user),
@@ -151,6 +156,9 @@ class DiffRequest(BaseModel):
     symbol_name: str
     refactor_instruction: str
     provider: InferenceProvider = "openai"
+
+class UserKeyRequest(BaseModel):
+    openai_api_key: str
 
 
 # ─── GitHub OAuth Routes ──────────────────────────────────────────────────────
@@ -268,7 +276,35 @@ async def logout(request: Request):
     return response
 
 
-# ─── Repository Routes ────────────────────────────────────────────────────────
+@app.get("/api/user")
+async def get_user_profile(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    session = await get_github_session(db, user)
+    return await session.get("/user")
+
+@app.post("/api/user/keys")
+async def save_user_keys(
+    body: UserKeyRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.security import TokenEncryptor
+    
+    if body.openai_api_key:
+        encryptor = TokenEncryptor()
+        enc, iv, tag = encryptor.encrypt(body.openai_api_key)
+        user.openai_api_key_enc = enc
+        user.openai_api_key_iv = iv
+        user.openai_api_key_tag = tag
+        db.add(user)
+        await db.commit()
+    
+    return {"status": "ok"}
+
+
+# ─── Repositories ─────────────────────────────────────────────────────────────
 
 @app.get("/api/repos")
 async def list_repos(
@@ -384,7 +420,8 @@ async def stream_query(
     if repo.status != RepoStatus.READY:
         raise HTTPException(status_code=400, detail=f"Repository not ready: {repo.status.value}")
 
-    query_svc = request.app.state.query_svc
+    api_key = get_user_openai_key(user)
+    query_svc = QueryService(api_key=api_key)
 
     async def token_stream():
         gen = await query_svc.query(
@@ -435,7 +472,8 @@ async def generate_tests(
         "Use pytest for Python, Jest/Vitest for TypeScript/JavaScript."
     )
 
-    query_svc = request.app.state.query_svc
+    api_key = get_user_openai_key(user)
+    query_svc = QueryService(api_key=api_key)
 
     async def stream():
         gen = await query_svc.query(
@@ -479,7 +517,8 @@ async def refactor_diff(
         f"Instruction: {body.refactor_instruction}"
     )
 
-    query_svc = request.app.state.query_svc
+    api_key = get_user_openai_key(user)
+    query_svc = QueryService(api_key=api_key)
 
     async def stream():
         gen = await query_svc.query(
