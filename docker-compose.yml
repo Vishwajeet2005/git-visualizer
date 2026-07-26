@@ -10,7 +10,7 @@ networks:
 # ── Named volumes ────────────────────────────────────────────────────────────
 volumes:
   postgres_data:
-  qdrant_data:
+
   redis_data:
   prometheus_data:
   grafana_data:
@@ -19,7 +19,7 @@ volumes:
 x-api-env: &api-env
   DATABASE_URL:        postgresql+asyncpg://nexus:${POSTGRES_PASSWORD}@postgres:5432/nexus
   REDIS_URL:           redis://:${REDIS_PASSWORD}@redis:6379/0
-  QDRANT_URL:          http://qdrant:6333
+
   OPENAI_API_KEY:      ${OPENAI_API_KEY}
   ANTHROPIC_API_KEY:   ${ANTHROPIC_API_KEY}
   GITHUB_CLIENT_ID:    ${GITHUB_CLIENT_ID}
@@ -35,8 +35,10 @@ services:
 
   # ── PostgreSQL ─────────────────────────────────────────────────────────────
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB:       nexus
       POSTGRES_USER:     nexus
@@ -77,28 +79,6 @@ services:
       timeout: 3s
       retries: 5
 
-  # ── Qdrant Vector DB ───────────────────────────────────────────────────────
-  qdrant:
-    image: qdrant/qdrant:v1.9.0
-    restart: unless-stopped
-    environment:
-      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
-      QDRANT__STORAGE__STORAGE_PATH: /qdrant/storage
-      QDRANT__LOG_LEVEL: WARN
-    volumes:
-      - qdrant_data:/qdrant/storage
-    networks:
-      - nexus_internal
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:6333/readyz"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 2g
-
   # ── FastAPI Backend ────────────────────────────────────────────────────────
   api:
     build:
@@ -113,8 +93,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      qdrant:
         condition: service_healthy
     networks:
       - nexus_internal
@@ -154,8 +132,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      qdrant:
         condition: service_healthy
     networks:
       - nexus_internal
