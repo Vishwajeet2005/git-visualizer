@@ -414,19 +414,61 @@ export default function DashboardPage() {
   const [showDiff, setShowDiff]   = useState(false);
   const [activeTab, setActiveTab] = useState<"chat" | "diff">("chat");
   const [sidePanel, setSidePanel] = useState<"graph" | "info">("graph");
+  const [importUrl, setImportUrl] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const [hasAutoExplained, setHasAutoExplained] = useState<Set<string>>(new Set());
   const abortRef = useRef<AbortController | null>(null);
 
-  // ── Load repos ──────────────────────────────────────────────────────────────
-  useEffect(() => {
-    fetch(`${API}/api/repos`, { credentials: "include" })
+  // ── Load & Poll repos ───────────────────────────────────────────────────────
+  const fetchRepos = useCallback(() => {
+    return fetch(`${API}/api/repos`, { credentials: "include" })
       .then((r) => r.json())
       .then((data: Repository[]) => {
         setRepos(data);
-        const ready = data.find((r) => r.status === "ready");
-        if (ready) setActiveRepo(ready);
+        return data;
       })
       .catch(console.error);
   }, []);
+
+  useEffect(() => {
+    fetchRepos().then((data) => {
+      if (data) {
+        // Automatically select a ready repo if none is selected
+        const ready = data.find((r) => r.status === "ready");
+        if (ready && !activeRepo) setActiveRepo(ready);
+      }
+    });
+
+    const interval = setInterval(() => {
+      fetchRepos();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [fetchRepos, activeRepo]);
+
+  // ── Import repo ─────────────────────────────────────────────────────────────
+  const handleImportRepo = useCallback(async () => {
+    if (!importUrl.trim() || isImporting) return;
+    setIsImporting(true);
+    try {
+      const resp = await fetch(`${API}/api/repos`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ github_url: importUrl.trim() }),
+      });
+      if (resp.ok) {
+        setImportUrl("");
+        await fetchRepos();
+      } else {
+        alert("Failed to import repository.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Error importing repository.");
+    } finally {
+      setIsImporting(false);
+    }
+  }, [importUrl, fetchRepos, isImporting]);
 
   // ── Load mock graph data when repo changes ──────────────────────────────────
   useEffect(() => {
@@ -566,6 +608,16 @@ export default function DashboardPage() {
     }
   }, [handleSend]);
 
+  // ── Auto-explain when a repo becomes ready ──────────────────────────────────
+  useEffect(() => {
+    if (activeRepo && activeRepo.status === "ready" && !hasAutoExplained.has(activeRepo.id)) {
+      setHasAutoExplained((prev) => new Set(prev).add(activeRepo.id));
+      setTimeout(() => {
+        handleSend("Explain the overall architecture and purpose of this repository.");
+      }, 500);
+    }
+  }, [activeRepo, hasAutoExplained, handleSend]);
+
   // ── Generate tests ──────────────────────────────────────────────────────────
   const handleGenerateTests = useCallback(async () => {
     if (!activeFile || !activeRepo) return;
@@ -642,9 +694,9 @@ export default function DashboardPage() {
 
       {/* ── Left sidebar: repo selector + file tree ── */}
       <aside className="w-64 flex-shrink-0 flex flex-col border-r border-white/6 bg-[#0d0d15]">
-        {/* Repo selector */}
-        <div className="px-4 py-4 border-b border-white/6">
-          <div className="flex items-center gap-2 mb-3">
+        {/* Repo selector & Import */}
+        <div className="px-4 py-4 border-b border-white/6 flex flex-col gap-3">
+          <div className="flex items-center gap-2">
             <div
               className="w-6 h-6 rounded-lg bg-purple-500/20 border border-purple-500/30
                          flex items-center justify-center text-xs text-purple-400"
@@ -653,6 +705,26 @@ export default function DashboardPage() {
             </div>
             <span className="text-xs font-semibold text-neutral-300">Nexus</span>
           </div>
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="GitHub URL..."
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+              className="flex-1 min-w-0 bg-white/5 border border-white/8 rounded-lg px-2.5 py-1.5
+                         text-xs text-neutral-300 placeholder-neutral-600
+                         focus:outline-none focus:border-purple-500/40"
+            />
+            <button
+              onClick={handleImportRepo}
+              disabled={isImporting || !importUrl.trim()}
+              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 shrink-0"
+            >
+              {isImporting ? "..." : "Import"}
+            </button>
+          </div>
+
           <select
             value={activeRepo?.id ?? ""}
             onChange={(e) => {
@@ -665,19 +737,21 @@ export default function DashboardPage() {
             <option value="">Select repository…</option>
             {repos.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.full_name}
+                {r.full_name} {r.status !== "ready" ? `(${r.status})` : ""}
               </option>
             ))}
           </select>
           {activeRepo && (
-            <div className="mt-2 flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
                   activeRepo.status === "ready" ? "bg-green-400" : "bg-amber-400 animate-pulse"
                 }`}
               />
               <span className="text-[10px] text-neutral-500">
-                {activeRepo.chunk_count.toLocaleString()} chunks &middot; {activeRepo.file_count} files
+                {activeRepo.status === "ready" 
+                  ? `${activeRepo.chunk_count.toLocaleString()} chunks · ${activeRepo.file_count} files` 
+                  : "Processing..."}
               </span>
             </div>
           )}
