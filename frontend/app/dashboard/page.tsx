@@ -417,6 +417,8 @@ export default function DashboardPage() {
   const [importUrl, setImportUrl] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [hasAutoExplained, setHasAutoExplained] = useState<Set<string>>(new Set());
+  const [showSettings, setShowSettings] = useState(false);
+  const [openaiKey, setOpenaiKey] = useState("");
   const abortRef = useRef<AbortController | null>(null);
 
   // ── Load & Poll repos ───────────────────────────────────────────────────────
@@ -444,6 +446,28 @@ export default function DashboardPage() {
     }, 3000);
     return () => clearInterval(interval);
   }, [fetchRepos, activeRepo]);
+
+  // ── Save Settings ───────────────────────────────────────────────────────────
+  const handleSaveSettings = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/user/keys`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ openai_api_key: openaiKey })
+      });
+      if (res.ok) {
+        setShowSettings(false);
+        setOpenaiKey("");
+        alert("Settings saved securely!");
+      } else {
+        alert("Failed to save settings.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error saving settings.");
+    }
+  }, [openaiKey]);
 
   // ── Import repo ─────────────────────────────────────────────────────────────
   const handleImportRepo = useCallback(async () => {
@@ -787,6 +811,16 @@ export default function DashboardPage() {
             />
           ))}
         </div>
+
+        {/* Settings button */}
+        <div className="p-4 border-t border-white/6">
+          <button
+            onClick={() => setShowSettings(true)}
+            className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium text-neutral-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+          >
+            ⚙️ Settings
+          </button>
+        </div>
       </aside>
 
       {/* ── Center: Chat / Diff panel ── */}
@@ -878,6 +912,60 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      <AnimatePresence>
+        {showSettings && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[#12121a] border border-white/10 rounded-xl w-full max-w-md overflow-hidden shadow-2xl"
+            >
+              <div className="px-5 py-4 border-b border-white/6 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-white">Settings</h2>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="text-neutral-500 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                    OpenAI API Key
+                  </label>
+                  <input
+                    type="password"
+                    value={openaiKey}
+                    onChange={(e) => setOpenaiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500/50"
+                  />
+                  <p className="text-[10px] text-neutral-500 mt-2">
+                    Your key is securely encrypted at rest (AES-256-GCM) and only decrypted in-memory during inference or ingestion.
+                  </p>
+                </div>
+              </div>
+              <div className="px-5 py-4 bg-black/20 border-t border-white/6 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className="px-4 py-2 text-xs font-medium text-neutral-400 hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveSettings}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium rounded-lg transition-colors"
+                >
+                  Save Settings
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
