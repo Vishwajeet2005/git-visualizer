@@ -9,7 +9,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from backend.models.schema import Base
+from backend.schema import Base
 
 # ── Alembic Config object ─────────────────────────────────────────────────────
 config = context.config
