@@ -17,6 +17,15 @@ services:
       - key: REDIS_PASSWORD
         generateValue: true
 
+  - type: pserv
+    name: qdrant
+    env: docker
+    image: qdrant/qdrant:latest
+    disk:
+      name: qdrant-data
+      mountPath: /qdrant/storage
+      sizeGB: 1
+
   - type: web
     name: nexus-api
     env: docker
@@ -37,9 +46,7 @@ services:
           name: redis
           envVarKey: REDIS_PASSWORD
       - key: QDRANT_URL
-        sync: false
-      - key: QDRANT_API_KEY
-        sync: false
+        value: http://qdrant:6333
       - key: OPENAI_API_KEY
         sync: false
       - key: GITHUB_CLIENT_ID
@@ -68,9 +75,7 @@ services:
           name: redis
           envVarKey: REDIS_PASSWORD
       - key: QDRANT_URL
-        sync: false
-      - key: QDRANT_API_KEY
-        sync: false
+        value: http://qdrant:6333
       - key: OPENAI_API_KEY
         sync: false
       - key: GITHUB_CLIENT_ID
