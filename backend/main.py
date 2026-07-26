@@ -549,3 +549,4 @@ async def health():
 
 # needed for oauth_state in the callback
 import secrets
+print("Starting Nexus API...")

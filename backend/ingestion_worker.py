@@ -378,3 +378,4 @@ def _collect_files(root: str) -> list[str]:
                 except OSError:
                     pass
     return results
+print("Starting Celery Worker...")
