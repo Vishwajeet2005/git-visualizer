@@ -35,7 +35,7 @@ from backend.schema import (
 )
 from backend.schema import VectorChunk
 from backend.ast_chunker import ASTChunker, CodeChunk
-from backend.query_service import EmbeddingService, BM25Indexer
+from backend.query_service import EmbeddingService
 
 log = structlog.get_logger(__name__)
 
@@ -92,7 +92,6 @@ class NexusTask(Task):
     _db_factory = None
     _embedder: Optional[EmbeddingService] = None
     _chunker: Optional[ASTChunker] = None
-    _bm25: Optional[BM25Indexer] = None
 
     @property
     def db_factory(self):
@@ -110,12 +109,6 @@ class NexusTask(Task):
         if self._chunker is None:
             self._chunker = ASTChunker()
         return self._chunker
-
-    @property
-    def bm25(self) -> BM25Indexer:
-        if self._bm25 is None:
-            self._bm25 = BM25Indexer()
-        return self._bm25
 
 
 # ─── Main Ingestion Task ──────────────────────────────────────────────────────
