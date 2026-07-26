@@ -42,7 +42,12 @@ log = structlog.get_logger(__name__)
 # ─── Celery App ───────────────────────────────────────────────────────────────
 
 REDIS_URL = os.environ["REDIS_URL"]          # e.g. redis://redis:6379/0
-DATABASE_URL = os.environ["DATABASE_URL"]    # asyncpg URL
+raw_url = os.environ.get("DATABASE_URL", "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus")
+if raw_url.startswith("postgres://"):
+    raw_url = raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif raw_url.startswith("postgresql://"):
+    raw_url = raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+DATABASE_URL = raw_url
 
 celery_app = Celery(
     "nexus_workers",

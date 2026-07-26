@@ -41,10 +41,15 @@ from backend.security import CredentialPurgeService, RateLimiter, TokenEncryptor
 log = structlog.get_logger(__name__)
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-GITHUB_CLIENT_ID     = os.environ["GITHUB_CLIENT_ID"]
-GITHUB_CLIENT_SECRET = os.environ["GITHUB_CLIENT_SECRET"]
-REDIS_URL            = os.environ["REDIS_URL"]
-DATABASE_URL         = os.environ["DATABASE_URL"]
+GITHUB_CLIENT_ID     = os.environ.get("GITHUB_CLIENT_ID", "")
+GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
+REDIS_URL            = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+raw_url = os.environ.get("DATABASE_URL", "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus")
+if raw_url.startswith("postgres://"):
+    raw_url = raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif raw_url.startswith("postgresql://"):
+    raw_url = raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+DATABASE_URL = raw_url
 
 
 # ─── App Lifespan ─────────────────────────────────────────────────────────────
@@ -62,7 +67,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    await query_svc.aclose()
+
     await engine.dispose()
 
 
