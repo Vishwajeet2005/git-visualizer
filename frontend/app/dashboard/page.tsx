@@ -332,7 +332,8 @@ function GraphPanel({
   // Precompute neighbors for hover highlights
   const neighbors = useMemo(() => {
     const map = new Map<string, Set<string>>();
-    data.links.forEach((l) => {
+    data.links.forEach((linkObj) => {
+      const l = linkObj as any;
       const s = typeof l.source === "object" ? l.source.id : l.source;
       const t = typeof l.target === "object" ? l.target.id : l.target;
       if (!map.has(s)) map.set(s, new Set());
