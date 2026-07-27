@@ -327,27 +327,70 @@ function GraphPanel({
   highlightedNodes: Set<string>;
 }) {
   const fgRef = useRef<any>(null);
+  const [hoverNode, setHoverNode] = useState<any | null>(null);
+
+  // Precompute neighbors for hover highlights
+  const neighbors = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    data.links.forEach((l) => {
+      const s = typeof l.source === "object" ? l.source.id : l.source;
+      const t = typeof l.target === "object" ? l.target.id : l.target;
+      if (!map.has(s)) map.set(s, new Set());
+      if (!map.has(t)) map.set(t, new Set());
+      map.get(s)!.add(t);
+      map.get(t)!.add(s);
+    });
+    return map;
+  }, [data]);
 
   const nodeColor = useCallback(
     (node: any) => {
+      if (hoverNode) {
+        if (node.id === hoverNode.id) return "#fff"; // Hovered node
+        if (neighbors.get(hoverNode.id)?.has(node.id)) return LANG_COLORS[node.language] ?? "#888";
+        return "#1e1e2e"; // Dim others
+      }
       if (highlightedNodes.size === 0) {
         return LANG_COLORS[node.language] ?? "#888";
       }
       return highlightedNodes.has(node.id) ? "#f59e0b" : "#1e1e2e";
     },
-    [highlightedNodes]
+    [highlightedNodes, hoverNode, neighbors]
   );
 
   const linkColor = useCallback(
     (link: any) => {
       const srcId = typeof link.source === "object" ? link.source.id : link.source;
       const tgtId = typeof link.target === "object" ? link.target.id : link.target;
+      
+      if (hoverNode) {
+        if (srcId === hoverNode.id || tgtId === hoverNode.id) return "rgba(255,255,255,0.4)";
+        return "rgba(255,255,255,0.02)";
+      }
+      
       if (highlightedNodes.has(srcId) || highlightedNodes.has(tgtId)) {
         return "rgba(245,158,11,0.8)";
       }
       return "rgba(255,255,255,0.06)";
     },
-    [highlightedNodes]
+    [highlightedNodes, hoverNode]
+  );
+
+  // Camera focus animation on click
+  const handleNodeClick = useCallback(
+    (node: any) => {
+      if (fgRef.current) {
+        const distance = 100;
+        const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
+        fgRef.current.cameraPosition(
+          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
+          node,
+          2000 // ms transition
+        );
+      }
+      onNodeClick(node);
+    },
+    [onNodeClick]
   );
 
   return (
@@ -380,17 +423,23 @@ function GraphPanel({
         graphData={data}
         nodeLabel={(n: any) => `${n.name} (${n.node_type})`}
         nodeColor={nodeColor}
-        nodeVal={(n: any) => n.val ?? 1}
+        nodeVal={(n: any) => Math.sqrt(n.val ?? 1)}
+        nodeOpacity={0.9}
         linkColor={linkColor}
-        linkWidth={(l: any) => (
-          highlightedNodes.has(
-            typeof l.source === "object" ? l.source.id : l.source
-          ) ? 2 : 0.3
-        )}
-        linkDirectionalArrowLength={4}
+        linkWidth={(l: any) => {
+          const srcId = typeof l.source === "object" ? l.source.id : l.source;
+          const tgtId = typeof l.target === "object" ? l.target.id : l.target;
+          if (hoverNode && (srcId === hoverNode.id || tgtId === hoverNode.id)) return 1;
+          return highlightedNodes.has(srcId) ? 2 : 0.3;
+        }}
+        linkDirectionalParticles={2}
+        linkDirectionalParticleWidth={1.5}
+        linkDirectionalParticleSpeed={(l: any) => l.type === "import" ? 0.005 : 0.01}
+        linkDirectionalArrowLength={3}
         linkDirectionalArrowRelPos={1}
-        onNodeClick={(node: any) => onNodeClick(node)}
-        backgroundColor="#080810"
+        onNodeClick={handleNodeClick}
+        onNodeHover={setHoverNode}
+        backgroundColor="#050508"
         showNavInfo={false}
       />
     </div>
@@ -494,32 +543,25 @@ export default function DashboardPage() {
     }
   }, [importUrl, fetchRepos, isImporting]);
 
-  // ── Load mock graph data when repo changes ──────────────────────────────────
+  // ── Load real graph data when repo changes ──────────────────────────────────
   useEffect(() => {
     if (!activeRepo) return;
-    // In production: fetch from /api/repos/:id/graph
-    // Mock data for demonstration
-    const mockNodes: GraphNode[] = [
-      { id: "auth-service", name: "AuthService", file_path: "src/auth/service.ts", node_type: "class", language: "typescript", val: 3 },
-      { id: "validate-token", name: "validateToken", file_path: "src/auth/service.ts", node_type: "method", language: "typescript", val: 2 },
-      { id: "user-repo", name: "UserRepository", file_path: "src/users/repository.ts", node_type: "class", language: "typescript", val: 2 },
-      { id: "find-by-id", name: "findById", file_path: "src/users/repository.ts", node_type: "method", language: "typescript", val: 1 },
-      { id: "middleware", name: "authMiddleware", file_path: "src/middleware/auth.ts", node_type: "function", language: "typescript", val: 2 },
-      { id: "jwt-util", name: "verifyJWT", file_path: "src/utils/jwt.ts", node_type: "function", language: "typescript", val: 1 },
-      { id: "main-app", name: "app", file_path: "src/app.ts", node_type: "module", language: "typescript", val: 4 },
-      { id: "db-conn", name: "connectDatabase", file_path: "src/db/index.ts", node_type: "function", language: "typescript", val: 1 },
-    ];
-    const mockLinks: GraphLink[] = [
-      { source: "middleware", target: "validate-token", type: "call" },
-      { source: "validate-token", target: "jwt-util", type: "call" },
-      { source: "validate-token", target: "find-by-id", type: "call" },
-      { source: "auth-service", target: "validate-token", type: "import" },
-      { source: "user-repo", target: "find-by-id", type: "import" },
-      { source: "main-app", target: "middleware", type: "import" },
-      { source: "main-app", target: "db-conn", type: "import" },
-      { source: "main-app", target: "auth-service", type: "import" },
-    ];
-    setGraphData({ nodes: mockNodes, links: mockLinks });
+    let isSubscribed = true;
+
+    fetch(`${API}/api/repos/${activeRepo.id}/graph`, { credentials: "include" })
+      .then(res => res.json())
+      .then((data: GraphData) => {
+        if (isSubscribed) {
+          setGraphData(data);
+        }
+      })
+      .catch(err => {
+        console.error("Failed to fetch graph data:", err);
+      });
+
+    return () => {
+      isSubscribed = false;
+    };
   }, [activeRepo]);
 
   // ── Send chat message ───────────────────────────────────────────────────────
@@ -583,6 +625,22 @@ export default function DashboardPage() {
                 m.id === assistantId ? { ...m, content: accumulated } : m
               )
             );
+            
+            // Real-time graph highlighting based on LLM output
+            const found = graphData.nodes.filter(n => n.name.length > 3 && accumulated.includes(n.name));
+            if (found.length > 0) {
+              setHighlightedNodes(prev => {
+                let changed = false;
+                const next = new Set(prev);
+                for (const f of found) {
+                  if (!next.has(f.id)) {
+                    next.add(f.id);
+                    changed = true;
+                  }
+                }
+                return changed ? next : prev;
+              });
+            }
           }
         }
       }
@@ -599,7 +657,7 @@ export default function DashboardPage() {
     } finally {
       setChatLoading(false);
     }
-  }, [chatInput, activeRepo, chatLoading]);
+  }, [chatInput, activeRepo, chatLoading, graphData.nodes]);
 
   // ── Graph node click → Impact Analysis Mode + Explain ─────────────────────────
   const handleNodeClick = useCallback(
