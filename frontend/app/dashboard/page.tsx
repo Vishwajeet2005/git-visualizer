@@ -468,7 +468,7 @@ export default function DashboardPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [hasAutoExplained, setHasAutoExplained] = useState<Set<string>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
-  const [openaiKey, setOpenaiKey] = useState("");
+  const [groqKey, setGroqKey] = useState("");
   const abortRef = useRef<AbortController | null>(null);
 
   // ── Load & Poll repos ───────────────────────────────────────────────────────
@@ -504,11 +504,11 @@ export default function DashboardPage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ openai_api_key: openaiKey })
+        body: JSON.stringify({ groq_api_key: groqKey })
       });
       if (res.ok) {
         setShowSettings(false);
-        setOpenaiKey("");
+        setGroqKey("");
         alert("Settings saved securely!");
       } else {
         alert("Failed to save settings.");
@@ -517,7 +517,7 @@ export default function DashboardPage() {
       console.error(e);
       alert("Error saving settings.");
     }
-  }, [openaiKey]);
+  }, [groqKey]);
 
   // ── Import repo ─────────────────────────────────────────────────────────────
   const handleImportRepo = useCallback(async () => {
@@ -603,7 +603,7 @@ export default function DashboardPage() {
         body: JSON.stringify({
           question: textToSend,
           repository_id: activeRepo.id,
-          provider: "openai",
+          provider: "groq",
         }),
         signal: ctrl.signal,
       });
@@ -725,7 +725,7 @@ export default function DashboardPage() {
           file_path: activeFile.path,
           symbol_name: activeFile.name,
           refactor_instruction: instruction,
-          provider: "openai",
+          provider: "groq",
         }),
       });
 
@@ -993,12 +993,12 @@ export default function DashboardPage() {
               <div className="p-5 space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-                    OpenAI API Key
+                    Groq API Key
                   </label>
                   <input
                     type="password"
-                    value={openaiKey}
-                    onChange={(e) => setOpenaiKey(e.target.value)}
+                    value={groqKey}
+                    onChange={(e) => setGroqKey(e.target.value)}
                     placeholder="sk-..."
                     className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500/50"
                   />
