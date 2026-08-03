@@ -6,8 +6,9 @@ databases:
 services:
   - type: pserv
     name: redis
-    env: docker
-    image: redis:7-alpine
+    env: image
+    image:
+      url: redis:7-alpine
     disk:
       name: redis-data
       mountPath: /data
