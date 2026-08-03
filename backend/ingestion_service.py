@@ -76,10 +76,10 @@ async def ingest_repository(
 
         user: Optional[User] = await session.get(User, repo.owner_id)
         api_key = None
-        if user and user.openai_api_key_enc and user.openai_api_key_iv and user.openai_api_key_tag:
+        if user and user.groq_api_key_enc and user.groq_api_key_iv and user.groq_api_key_tag:
             from backend.security import TokenEncryptor
             encryptor = TokenEncryptor()
-            api_key = encryptor.decrypt(user.openai_api_key_enc, user.openai_api_key_iv, user.openai_api_key_tag)
+            api_key = encryptor.decrypt(user.groq_api_key_enc, user.groq_api_key_iv, user.groq_api_key_tag)
 
         embedder = EmbeddingService(api_key=api_key)
 
