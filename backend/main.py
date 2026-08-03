@@ -251,7 +251,7 @@ async def github_oauth_callback(
     response.headers["Location"] = f"{FRONTEND_URL}/dashboard"
     response.set_cookie(
         "nexus_session", session_token,
-        httponly=True, secure=True, samesite="strict", max_age=28800,
+        httponly=True, secure=True, samesite="none", max_age=28800,
     )
     response.delete_cookie("oauth_state")
     return response
@@ -267,7 +267,7 @@ async def logout(request: Request, db: AsyncSession = Depends(get_db)):
             user.session_token = None
             await db.commit()
     response = Response(status_code=200)
-    response.delete_cookie("nexus_session")
+    response.delete_cookie("nexus_session", samesite="none", secure=True)
     return response
 
 
