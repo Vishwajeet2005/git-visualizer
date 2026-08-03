@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Lightning, Graph, ChatText, Code, ShieldCheck,
@@ -131,10 +131,21 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(false);
   const rm = useReducedMotion();
 
+  useEffect(() => {
+    // Reset loading state if the user navigates back (handles bfcache)
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        setLoading(false);
+      }
+    };
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
+
   const handleLogin = () => {
     setLoading(true);
-    const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
-    window.location.href = `${base}/auth/github`;
+    const base = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+    window.location.href = `${base}/api/auth/github`;
   };
 
   const fadeIn = (delay: number) => rm
