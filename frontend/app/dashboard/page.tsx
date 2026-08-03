@@ -546,7 +546,7 @@ export default function DashboardPage() {
         method: "POST",
         headers: getHeaders(),
         credentials: "include",
-        body: JSON.stringify({ github_url: importUrl.trim() }),
+        body: JSON.stringify({ full_name: importUrl.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\/$/, "") }),
       });
       if (resp.ok) {
         setImportUrl("");
