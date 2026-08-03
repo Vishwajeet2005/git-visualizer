@@ -409,8 +409,9 @@ async def import_repo(
         await db.commit()
         await db.refresh(repo)
 
+    import asyncio
     task_id = "bg-" + str(uuid.uuid4())
-    background_tasks.add_task(ingest_repository, str(repo.id), plain_token)
+    asyncio.create_task(ingest_repository(str(repo.id), plain_token))
     repo.celery_task_id = task_id
     await db.commit()
 
