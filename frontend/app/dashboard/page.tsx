@@ -720,8 +720,15 @@ export default function DashboardPage() {
   }, [fetchRepos, isImporting]);
 
   const handleRepoSelect = useCallback(async (r: MergedRepo) => {
-    setActiveRepo(r);
-    if (r.status === "unimported") await importRepo(r.full_name);
+    if (r.status === "unimported") {
+      const confirm = window.confirm(`Do you want to import the repository "${r.full_name}"?`);
+      if (confirm) {
+        setActiveRepo(r);
+        await importRepo(r.full_name);
+      }
+    } else {
+      setActiveRepo(r);
+    }
   }, [importRepo]);
 
   // ── Load graph ───────────────────────────────────────────────────────────────
