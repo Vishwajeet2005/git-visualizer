@@ -710,7 +710,8 @@ export default function DashboardPage() {
     if (isImporting) return;
     setIsImporting(true);
     try {
-      const r = await fetch(`${API}/api/repos`, {
+      // Use Next.js rewrite proxy (relative path) to avoid CORS preflight caching issues for POST
+      const r = await fetch(`/api/repos`, {
         method: "POST", credentials: "include", headers: getHeaders(),
         body: JSON.stringify({ full_name }),
       });
