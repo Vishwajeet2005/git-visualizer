@@ -500,10 +500,10 @@ export default function DashboardPage() {
   // ── Save Settings ───────────────────────────────────────────────────────────
   const handleSaveSettings = useCallback(async () => {
     try {
-      const res = await fetch(`${API}/api/user/keys`, {
+      const res = await fetch(`${API}/api/user/key`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ groq_api_key: groqKey })
       });
       if (res.ok) {
@@ -526,8 +526,8 @@ export default function DashboardPage() {
     try {
       const resp = await fetch(`${API}/api/repos`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ github_url: importUrl.trim() }),
       });
       if (resp.ok) {
@@ -598,8 +598,8 @@ export default function DashboardPage() {
     try {
       const resp = await fetch(`${API}/api/query/stream`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           question: textToSend,
           repository_id: activeRepo.id,
@@ -718,8 +718,8 @@ export default function DashboardPage() {
     try {
       const resp = await fetch(`${API}/api/tools/refactor-diff`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           repository_id: activeRepo.id,
           file_path: activeFile.path,
