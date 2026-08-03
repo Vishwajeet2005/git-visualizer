@@ -67,6 +67,21 @@ interface Repository {
   file_count: number;
 }
 
+interface GithubRepo {
+  full_name: string;
+  private: boolean;
+  html_url: string;
+  updated_at: string;
+}
+
+interface MergedRepo {
+  full_name: string;
+  id?: string;
+  status: string;
+  chunk_count?: number;
+  file_count?: number;
+}
+
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
 const LANG_COLORS: Record<string, string> = {
@@ -469,7 +484,7 @@ export default function DashboardPage() {
     };
   };
   const [repos, setRepos]         = useState<Repository[]>([]);
-  const [activeRepo, setActiveRepo] = useState<Repository | null>(null);
+  const [activeRepo, setActiveRepo] = useState<MergedRepo | null>(null);
   const [fileTree, setFileTree]   = useState<FileNode[]>([]);
   const [activeFile, setActiveFile] = useState<FileNode | null>(null);
   const [fileSearch, setFileSearch] = useState("");
@@ -538,21 +553,21 @@ export default function DashboardPage() {
   }, [groqKey]);
 
   // ── Import repo ─────────────────────────────────────────────────────────────
-  const handleImportRepo = useCallback(async () => {
-    if (!importUrl.trim() || isImporting) return;
+  const handleImportRepo = useCallback(async (full_name: string) => {
+    if (isImporting) return;
     setIsImporting(true);
     try {
       const resp = await fetch(`${API}/api/repos`, {
         method: "POST",
         headers: getHeaders(),
         credentials: "include",
-        body: JSON.stringify({ full_name: importUrl.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/$/, "") }),
+        body: JSON.stringify({ full_name }),
       });
       if (resp.ok) {
-        setImportUrl("");
         await fetchRepos();
       } else {
-        alert("Failed to import repository.");
+        const errData = await resp.json().catch(() => ({}));
+        alert(`Error importing repository: ${errData.detail || resp.statusText}`);
       }
     } catch (err) {
       console.error(err);
@@ -560,14 +575,14 @@ export default function DashboardPage() {
     } finally {
       setIsImporting(false);
     }
-  }, [importUrl, fetchRepos, isImporting]);
+  }, [fetchRepos, isImporting]);
 
   // ── Load real graph data when repo changes ──────────────────────────────────
   useEffect(() => {
     if (!activeRepo) return;
     let isSubscribed = true;
 
-    fetch(`${API}/api/repos/${activeRepo.id}/graph`, { credentials: "include", headers: getHeaders() })
+    fetch(`${API}/api/repos/${activeRepo.id || ""}/graph`, { credentials: "include", headers: getHeaders() })
       .then(res => res.json())
       .then((data: GraphData) => {
         if (isSubscribed) {
@@ -620,7 +635,7 @@ export default function DashboardPage() {
         credentials: "include",
         body: JSON.stringify({
           question: textToSend,
-          repository_id: activeRepo.id,
+          repository_id: activeRepo.id || "",
           provider: "groq",
         }),
         signal: ctrl.signal,
@@ -711,8 +726,8 @@ export default function DashboardPage() {
 
   // ── Auto-explain when a repo becomes ready ──────────────────────────────────
   useEffect(() => {
-    if (activeRepo && activeRepo.status === "ready" && !hasAutoExplained.has(activeRepo.id)) {
-      setHasAutoExplained((prev) => new Set(prev).add(activeRepo.id));
+    if (activeRepo && activeRepo.status === "ready" && !hasAutoExplained.has(activeRepo.full_name)) {
+      setHasAutoExplained((prev) => new Set(prev).add(activeRepo.full_name));
       setTimeout(() => {
         handleSend("Explain the overall architecture and purpose of this repository.");
       }, 500);
@@ -739,7 +754,7 @@ export default function DashboardPage() {
         headers: getHeaders(),
         credentials: "include",
         body: JSON.stringify({
-          repository_id: activeRepo.id,
+          repository_id: activeRepo.id || "",
           file_path: activeFile.path,
           symbol_name: activeFile.name,
           refactor_instruction: instruction,
@@ -807,38 +822,24 @@ export default function DashboardPage() {
             <span className="text-xs font-semibold text-neutral-300">Nexus</span>
           </div>
 
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="GitHub URL..."
-              value={importUrl}
-              onChange={(e) => setImportUrl(e.target.value)}
-              className="flex-1 min-w-0 bg-white/5 border border-white/8 rounded-lg px-2.5 py-1.5
-                         text-xs text-neutral-300 placeholder-neutral-600
-                         focus:outline-none focus:border-purple-500/40"
-            />
-            <button
-              onClick={handleImportRepo}
-              disabled={isImporting || !importUrl.trim()}
-              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 shrink-0"
-            >
-              {isImporting ? "..." : "Import"}
-            </button>
-          </div>
-
           <select
-            value={activeRepo?.id ?? ""}
-            onChange={(e) => {
-              const r = repos.find((x) => x.id === e.target.value);
-              setActiveRepo(r ?? null);
+            value={activeRepo?.full_name ?? ""}
+            onChange={async (e) => {
+              const r = repos.find((x) => x.full_name === e.target.value);
+              if (r) {
+                setActiveRepo(r);
+                if (r.status === 'unimported') {
+                  await handleImportRepo(r.full_name);
+                }
+              }
             }}
             className="w-full bg-white/5 border border-white/8 rounded-lg px-3 py-2
-                       text-xs text-neutral-200 focus:outline-none focus:border-purple-500/40"
+                       text-xs text-neutral-200 focus:outline-none focus:border-purple-500/40 cursor-pointer"
           >
             <option value="">Select repository…</option>
             {repos.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.full_name} {r.status !== "ready" ? `(${r.status})` : ""}
+              <option key={r.full_name} value={r.full_name}>
+                {r.full_name} {r.status !== "READY" ? `(${r.status})` : ""}
               </option>
             ))}
           </select>
@@ -850,8 +851,8 @@ export default function DashboardPage() {
                 }`}
               />
               <span className="text-[10px] text-neutral-500">
-                {activeRepo.status === "ready" 
-                  ? `${activeRepo.chunk_count.toLocaleString()} chunks · ${activeRepo.file_count} files` 
+                {activeRepo.status === "ready" || activeRepo.status === "READY"
+                  ? `${(activeRepo.chunk_count || 0).toLocaleString()} chunks · ${activeRepo.file_count || 0} files` 
                   : "Processing..."}
               </span>
             </div>

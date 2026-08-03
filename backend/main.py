@@ -305,6 +305,35 @@ async def update_key(
 
 # ─── Repositories ─────────────────────────────────────────────────────────────
 
+@app.get("/api/github/repos")
+async def list_github_repos(
+    request: Request,
+    user: User = Depends(get_current_user),
+    _: None = Depends(rate_limit),
+):
+    """Fetch the user's repositories directly from GitHub."""
+    encryptor = request.app.state.encryptor
+    plain_token = encryptor.decrypt(user.encrypted_token, user.token_iv, user.token_tag)
+    
+    async with httpx.AsyncClient() as client:
+        gh_resp = await client.get(
+            "https://api.github.com/user/repos?per_page=100&sort=updated",
+            headers={"Authorization": f"Bearer {plain_token}"}
+        )
+        if gh_resp.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch repositories from GitHub.")
+            
+        repos = gh_resp.json()
+        
+    return [
+        {
+            "full_name": r["full_name"],
+            "private": r["private"],
+            "html_url": r["html_url"],
+            "updated_at": r["updated_at"]
+        } for r in repos
+    ]
+
 @app.get("/api/repos")
 async def list_repos(
     user: User = Depends(get_current_user),
