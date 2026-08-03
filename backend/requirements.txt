@@ -23,7 +23,9 @@ qdrant-client==1.9.1
 tree-sitter==0.21.3
 tree-sitter-languages==1.10.2
 
-# ── Embeddings & ML ──────────────────────────────────────────────────────────
+# 🚀 Embeddings & ML ───────────────────────────────────────────────────────────
+fastembed==0.2.7
+langchain-groq==0.1.4
 openai==1.30.1
 anthropic==0.28.0
 tiktoken==0.7.0
