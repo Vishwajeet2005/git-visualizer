@@ -9,7 +9,7 @@ import {
   GitBranch, FolderOpen, FolderSimple, File, MagnifyingGlass,
   Lightning, Gear, PaperPlaneRight, ArrowsClockwise, Flask,
   Code, Rows, X, Check, Download, CircleNotch,
-  WarningCircle, Graph,
+  WarningCircle, Graph, ThumbsUp, ThumbsDown, Copy,
 } from "@phosphor-icons/react";
 
 // ── Dynamic imports ───────────────────────────────────────────────────────────
@@ -413,21 +413,35 @@ function ChatPanel({
                   <Lightning size={11} weight="regular" style={{ color: "var(--accent)" }} />
                 </div>
               )}
-              <div
-                className={msg.role === "user" ? "" : "bezel-inner"}
-                style={{
-                  maxWidth: "82%",
-                  padding: "9px 13px",
-                  borderRadius: msg.role === "user" ? "var(--r3)" : "var(--r2)",
-                  fontSize: 12, lineHeight: 1.65,
-                  ...(msg.role === "user"
-                    ? { background: "var(--accent-dim)", border: "1px solid var(--accent-border)", color: "var(--accent-text)" }
-                    : { color: "var(--text-1)" }),
-                }}
-              >
-                <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", wordBreak: "break-word", margin: 0 }}>
-                  {msg.content}
-                </pre>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: "82%" }}>
+                <div
+                  className={msg.role === "user" ? "" : "bezel-inner"}
+                  style={{
+                    padding: "9px 13px",
+                    borderRadius: msg.role === "user" ? "var(--r3)" : "var(--r2)",
+                    fontSize: 12, lineHeight: 1.65,
+                    ...(msg.role === "user"
+                      ? { background: "var(--accent-dim)", border: "1px solid var(--accent-border)", color: "var(--accent-text)" }
+                      : { color: "var(--text-1)" }),
+                  }}
+                >
+                  <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", wordBreak: "break-word", margin: 0 }}>
+                    {msg.content}
+                  </pre>
+                </div>
+                {msg.role === "assistant" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2, paddingLeft: 4 }}>
+                    <button className="btn-ghost" style={{ padding: "3px 6px", borderRadius: "var(--r1)" }} title="Helpful" onClick={() => {}}>
+                      <ThumbsUp size={12} weight="regular" />
+                    </button>
+                    <button className="btn-ghost" style={{ padding: "3px 6px", borderRadius: "var(--r1)" }} title="Not helpful" onClick={() => {}}>
+                      <ThumbsDown size={12} weight="regular" />
+                    </button>
+                    <button className="btn-ghost" style={{ padding: "3px 6px", borderRadius: "var(--r1)" }} title="Copy response" onClick={() => navigator.clipboard.writeText(msg.content)}>
+                      <Copy size={12} weight="regular" />
+                    </button>
+                  </div>
+                )}
               </div>
             </motion.div>
           ))}
@@ -489,8 +503,11 @@ function ChatPanel({
               : <PaperPlaneRight size={12} weight="regular" />}
           </button>
         </div>
-        <p style={{ fontSize: 10, color: "var(--text-2)", marginTop: 5, paddingLeft: 2 }}>
-          Enter to send, Shift+Enter for newline
+        <p style={{ fontSize: 10, color: "var(--text-2)", marginTop: 8, paddingLeft: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>Enter to send, Shift+Enter for newline</span>
+          <span style={{ display: "flex", alignItems: "center", gap: 4, opacity: 0.8 }}>
+            <WarningCircle size={10} weight="regular" /> AI can make mistakes. Verify important information.
+          </span>
         </p>
       </div>
     </div>
