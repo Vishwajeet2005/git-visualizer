@@ -664,6 +664,7 @@ export default function DashboardPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [autoExplained, setAutoExplained] = useState<Set<string>>(new Set());
   const [showSettings, setShowSettings]   = useState(false);
+  const [confirmImport, setConfirmImport] = useState<MergedRepo | null>(null);
   const [groqKey, setGroqKey]         = useState("");
   const abortRef = useRef<AbortController | null>(null);
 
@@ -721,15 +722,11 @@ export default function DashboardPage() {
 
   const handleRepoSelect = useCallback(async (r: MergedRepo) => {
     if (r.status === "unimported") {
-      const confirm = window.confirm(`Do you want to import the repository "${r.full_name}"?`);
-      if (confirm) {
-        setActiveRepo(r);
-        await importRepo(r.full_name);
-      }
+      setConfirmImport(r);
     } else {
       setActiveRepo(r);
     }
-  }, [importRepo]);
+  }, []);
 
   // ── Load graph ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1113,6 +1110,72 @@ export default function DashboardPage() {
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "10px 16px", borderTop: "1px solid var(--border-0)", background: "rgba(0,0,0,0.15)" }}>
                 <button className="btn-ghost" onClick={() => setShowSettings(false)}>Cancel</button>
                 <button className="btn-accent" onClick={saveSettings}>Save</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Confirm Import modal ── */}
+      <AnimatePresence>
+        {confirmImport && (
+          <motion.div
+            key="backdrop"
+            initial={rm ? {} : { opacity: 0 }}
+            animate={rm ? {} : { opacity: 1 }}
+            exit={rm ? {} : { opacity: 0 }}
+            transition={rm ? { duration: 0 } : { duration: 0.18, ease: EASE_OUT }}
+            onClick={e => e.target === e.currentTarget && setConfirmImport(null)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 60,
+              display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+              background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
+            }}
+          >
+            <motion.div
+              key="modal"
+              initial={rm ? {} : { opacity: 0, scale: 0.95, y: 10 }}
+              animate={rm ? {} : { opacity: 1, scale: 1, y: 0 }}
+              exit={rm ? {} : { opacity: 0, scale: 0.95, y: 10 }}
+              transition={rm ? { duration: 0 } : { duration: 0.22, ease: EASE_OUT }}
+              className="bezel"
+              style={{ width: "100%", maxWidth: 400, overflow: "hidden" }}
+            >
+              <div style={{ padding: "20px 24px" }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-0)", marginBottom: 8 }}>
+                  Import Repository
+                </h3>
+                <p style={{ fontSize: 12, color: "var(--text-1)", lineHeight: 1.6 }}>
+                  Do you want to import <span style={{ color: "var(--text-0)", fontFamily: "var(--font-geist-mono)" }}>{confirmImport.full_name}</span>?
+                  <br />
+                  This will analyze the repository structure and map dependencies.
+                </p>
+              </div>
+              
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "12px 24px", borderTop: "1px solid var(--border-0)", background: "var(--bg-1)" }}>
+                <button 
+                  className="btn-ghost" 
+                  onClick={() => setConfirmImport(null)}
+                  style={{ padding: "6px 14px", fontSize: 12, borderRadius: "var(--r2)" }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  style={{
+                    background: "var(--text-0)", color: "#000", border: "none",
+                    padding: "6px 14px", fontSize: 12, fontWeight: 600, borderRadius: "var(--r2)",
+                    cursor: "pointer", transition: "opacity 100ms ease"
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = "0.9"}
+                  onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                  onClick={() => {
+                    setActiveRepo(confirmImport);
+                    importRepo(confirmImport.full_name);
+                    setConfirmImport(null);
+                  }}
+                >
+                  Import Repository
+                </button>
               </div>
             </motion.div>
           </motion.div>
