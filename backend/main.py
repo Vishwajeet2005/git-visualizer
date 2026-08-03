@@ -113,12 +113,12 @@ async def get_current_user(
     return user
 
 
-def get_user_openai_key(user: User) -> Optional[str]:
-    if not user.openai_api_key_enc or not user.openai_api_key_iv or not user.openai_api_key_tag:
+def get_user_groq_key(user: User) -> Optional[str]:
+    """Decrypt the user's Groq API key if present."""
+    if not user.groq_api_key_enc or not user.groq_api_key_iv or not user.groq_api_key_tag:
         return None
-    from backend.security import TokenEncryptor
     encryptor = TokenEncryptor()
-    return encryptor.decrypt(user.openai_api_key_enc, user.openai_api_key_iv, user.openai_api_key_tag)
+    return encryptor.decrypt(user.groq_api_key_enc, user.groq_api_key_iv, user.groq_api_key_tag)
 
 async def rate_limit(
     request: Request,
@@ -138,7 +138,7 @@ class RepoImportRequest(BaseModel):
 class QueryRequest(BaseModel):
     question: str         = Field(..., min_length=1, max_length=4096)
     repository_id: str
-    provider: InferenceProvider = "openai"
+    provider: InferenceProvider = "groq"
     system_prompt: Optional[str] = None
 
 
@@ -146,7 +146,7 @@ class TestGenRequest(BaseModel):
     repository_id: str
     file_path: str
     symbol_name: str
-    provider: InferenceProvider = "openai"
+    provider: InferenceProvider = "groq"
 
 
 class DiffRequest(BaseModel):
@@ -154,10 +154,10 @@ class DiffRequest(BaseModel):
     file_path: str
     symbol_name: str
     refactor_instruction: str
-    provider: InferenceProvider = "openai"
+    provider: InferenceProvider = "groq"
 
 class UserKeyRequest(BaseModel):
-    openai_api_key: str
+    groq_api_key: str
 
 
 # ─── GitHub OAuth Routes ──────────────────────────────────────────────────────
@@ -186,7 +186,6 @@ async def github_oauth_callback(
     db: AsyncSession = Depends(get_db),
 ):
     """Exchange code for token, upsert user, create session cookie."""
-    import secrets
     stored_state = request.cookies.get("oauth_state")
     if not stored_state or stored_state != state:
         raise HTTPException(status_code=400, detail="Invalid OAuth state.")
@@ -280,20 +279,19 @@ async def get_user_profile(
     session = await get_github_session(db, user)
     return await session.get("/user")
 
-@app.post("/api/user/keys")
-async def save_user_keys(
+@app.post("/api/user/key")
+async def update_key(
     body: UserKeyRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(rate_limit),
 ):
-    from backend.security import TokenEncryptor
-    
-    if body.openai_api_key:
+    if body.groq_api_key:
         encryptor = TokenEncryptor()
-        enc, iv, tag = encryptor.encrypt(body.openai_api_key)
-        user.openai_api_key_enc = enc
-        user.openai_api_key_iv = iv
-        user.openai_api_key_tag = tag
+        enc, iv, tag = encryptor.encrypt(body.groq_api_key)
+        user.groq_api_key_enc = enc
+        user.groq_api_key_iv = iv
+        user.groq_api_key_tag = tag
         db.add(user)
         await db.commit()
     
@@ -418,7 +416,7 @@ async def stream_query(
     if repo.status != RepoStatus.READY:
         raise HTTPException(status_code=400, detail=f"Repository not ready: {repo.status.value}")
 
-    api_key = get_user_openai_key(user)
+    api_key = get_user_groq_key(user)
     query_svc = QueryService(api_key=api_key)
 
     async def token_stream():
@@ -470,7 +468,7 @@ async def generate_tests(
         "Use pytest for Python, Jest/Vitest for TypeScript/JavaScript."
     )
 
-    api_key = get_user_openai_key(user)
+    api_key = get_user_groq_key(user)
     query_svc = QueryService(api_key=api_key)
 
     async def stream():
@@ -515,7 +513,7 @@ async def refactor_diff(
         f"Instruction: {body.refactor_instruction}"
     )
 
-    api_key = get_user_openai_key(user)
+    api_key = get_user_groq_key(user)
     query_svc = QueryService(api_key=api_key)
 
     async def stream():
