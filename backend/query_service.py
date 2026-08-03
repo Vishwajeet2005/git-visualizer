@@ -3,42 +3,37 @@ import uuid
 from typing import AsyncIterator, Optional, List, Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
-from openai import AsyncOpenAI
+from langchain_groq import ChatGroq
+from fastembed import TextEmbedding
 import structlog
 
 from backend.schema import create_engine, create_session_factory
 from backend.reranker import RerankerService
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, END
 from langchain_core.tools import tool
 
 log = structlog.get_logger(__name__)
 
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
-OPENAI_EMBED_MODEL = os.environ.get("OPENAI_EMBED_MODEL", "text-embedding-3-small")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "llama3-8b-8192")
 raw_url = os.environ.get("DATABASE_URL", "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus")
 if raw_url.startswith("postgres://"):
     raw_url = raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
 elif raw_url.startswith("postgresql://"):
     raw_url = raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 DATABASE_URL = raw_url
-InferenceProvider = Literal["openai", "anthropic", "ollama"]
+InferenceProvider = Literal["groq", "anthropic", "ollama"]
 
 class EmbeddingService:
     def __init__(self, api_key: Optional[str] = None) -> None:
-        key = api_key or os.environ.get("OPENAI_API_KEY")
-        self._client = AsyncOpenAI(api_key=key)
-        self.model_name = OPENAI_EMBED_MODEL
-        self.dense_dim = 1536
+        self.model_name = "BAAI/bge-small-en-v1.5"
+        self._client = TextEmbedding(model_name=self.model_name)
+        self.dense_dim = 384
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        response = await self._client.embeddings.create(
-            input=texts,
-            model=self.model_name,
-            dimensions=self.dense_dim,
-        )
-        return [item.embedding for item in response.data]
+        import asyncio
+        embeddings = await asyncio.to_thread(list, self._client.embed(texts))
+        return [list(emb) for emb in embeddings]
 
     async def embed_single(self, text: str) -> list[float]:
         return (await self.embed_batch([text]))[0]
@@ -161,7 +156,7 @@ class AgenticInferenceEngine:
         get_symbol_graph.search_svc = search_svc
         
         self.tools = [search_codebase, read_file, get_symbol_graph]
-        self.llm = ChatOpenAI(model=OPENAI_MODEL, api_key=api_key, streaming=True)
+        self.llm = ChatGroq(model=OPENAI_MODEL, api_key=api_key)
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         
         graph_builder = StateGraph(AgentState)
@@ -232,7 +227,7 @@ class QueryService:
         question: str,
         collection_name: str,
         repository_id: str,
-        provider: str = "openai",
+        provider: str = "groq",
         system_prompt: Optional[str] = None,
     ) -> AsyncIterator[str]:
         
