@@ -63,40 +63,14 @@ const LANG_COLORS: Record<string, string> = {
 function StatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
   if (s === "ready") {
-    return (
-      <span style={{
-        display: "inline-flex", alignItems: "center", gap: 4,
-        fontSize: 10, fontWeight: 500, fontFamily: "var(--font-geist-mono)",
-        color: "var(--addition)", background: "rgba(16,185,129,0.10)",
-        border: "1px solid rgba(16,185,129,0.22)", borderRadius: "var(--r1)",
-        padding: "2px 7px",
-      }}>
-        <Check size={9} weight="bold" /> ready
-      </span>
-    );
+    return <span style={{ fontSize: 10, color: "var(--addition)", fontFamily: "var(--font-geist-mono)" }}>ready</span>;
   }
   if (s === "unimported") {
-    return (
-      <span style={{
-        display: "inline-flex", alignItems: "center", gap: 4,
-        fontSize: 10, fontWeight: 500, fontFamily: "var(--font-geist-mono)",
-        color: "var(--text-2)", background: "rgba(255,255,255,0.04)",
-        border: "1px solid var(--border-0)", borderRadius: "var(--r1)",
-        padding: "2px 7px",
-      }}>
-        <Download size={9} weight="regular" /> import
-      </span>
-    );
+    return <span style={{ fontSize: 10, color: "var(--text-2)", fontFamily: "var(--font-geist-mono)" }}>import</span>;
   }
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 4,
-      fontSize: 10, fontWeight: 500, fontFamily: "var(--font-geist-mono)",
-      color: "#f59e0b", background: "rgba(245,158,11,0.10)",
-      border: "1px solid rgba(245,158,11,0.22)", borderRadius: "var(--r1)",
-      padding: "2px 7px",
-    }}>
-      <CircleNotch size={9} weight="regular" className="animate-spin" /> {s}
+    <span style={{ fontSize: 10, color: "#f59e0b", fontFamily: "var(--font-geist-mono)", display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <CircleNotch size={10} className="animate-spin" /> {s}
     </span>
   );
 }
@@ -229,23 +203,22 @@ function RepoSelect({
         }
       </button>
 
-      <AnimatePresence>
-        {open && (
           <motion.div
-            initial={rm ? {} : { opacity: 0, scale: 0.96, y: -4 }}
+            initial={rm ? {} : { opacity: 0, scale: 0.98, y: -2 }}
             animate={rm ? {} : { opacity: 1, scale: 1, y: 0 }}
-            exit={rm ? {} : { opacity: 0, scale: 0.96, y: -4 }}
-            transition={rm ? { duration: 0 } : { duration: 0.18, ease: EASE_OUT }}
-            className="bezel"
+            exit={rm ? {} : { opacity: 0, scale: 0.98, y: -2 }}
+            transition={rm ? { duration: 0 } : { duration: 0.15, ease: EASE_OUT }}
             style={{
-              position: "absolute", top: "calc(100% + 5px)", left: 0, right: 0,
+              position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
               zIndex: 50, overflow: "hidden",
+              background: "var(--bg-1)", border: "1px solid var(--border-0)",
+              boxShadow: "0 10px 40px rgba(0,0,0,0.5)",
             }}
           >
-            <div style={{ maxHeight: 240, overflowY: "auto", padding: "4px 0" }}>
+            <div style={{ maxHeight: 260, overflowY: "auto" }}>
               {repos.length === 0 ? (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "16px 12px", fontSize: 11, color: "var(--text-2)" }}>
-                  <CircleNotch size={13} className="animate-spin" weight="regular" /> Loading
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "16px", fontSize: 11, color: "var(--text-2)" }}>
+                  <CircleNotch size={12} className="animate-spin" /> Loading
                 </div>
               ) : repos.map(r => (
                 <button
@@ -253,16 +226,17 @@ function RepoSelect({
                   onClick={() => { onSelect(r); setOpen(false); }}
                   style={{
                     width: "100%", display: "flex", alignItems: "center", gap: 8,
-                    padding: "6px 10px", fontSize: 11, textAlign: "left",
+                    padding: "8px 10px", fontSize: 11, textAlign: "left",
                     cursor: "pointer", border: "none",
-                    background: activeRepo?.full_name === r.full_name ? "var(--accent-dim)" : "transparent",
-                    color: activeRepo?.full_name === r.full_name ? "var(--accent-text)" : "var(--text-1)",
-                    transition: "background 80ms cubic-bezier(0.23,1,0.32,1), color 80ms cubic-bezier(0.23,1,0.32,1)",
+                    borderBottom: "1px solid var(--border-0)",
+                    background: activeRepo?.full_name === r.full_name ? "var(--bg-2)" : "transparent",
+                    color: activeRepo?.full_name === r.full_name ? "var(--text-0)" : "var(--text-1)",
+                    transition: "background 80ms ease, color 80ms ease",
                   }}
-                  onMouseEnter={e => { if (activeRepo?.full_name !== r.full_name) { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "var(--text-0)"; } }}
+                  onMouseEnter={e => { if (activeRepo?.full_name !== r.full_name) { e.currentTarget.style.background = "var(--bg-2)"; e.currentTarget.style.color = "var(--text-0)"; } }}
                   onMouseLeave={e => { if (activeRepo?.full_name !== r.full_name) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-1)"; } }}
                 >
-                  <GitBranch size={11} weight="regular" style={{ flexShrink: 0, color: "var(--text-2)" }} />
+                  <GitBranch size={11} style={{ flexShrink: 0, color: "var(--text-2)" }} />
                   <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--font-geist-mono)" }}>
                     {r.full_name}
                   </span>
@@ -271,8 +245,6 @@ function RepoSelect({
               ))}
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
@@ -902,20 +874,8 @@ export default function DashboardPage() {
           background: "var(--bg-1)",
         }}
       >
-        {/* Brand + repo */}
+        {/* Repo */}
         <div style={{ padding: "12px 10px 10px", borderBottom: "1px solid var(--border-0)", display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 2px" }}>
-            <div style={{
-              width: 24, height: 24, borderRadius: "var(--r2)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              background: "var(--accent-dim)", border: "1px solid var(--accent-border)",
-              flexShrink: 0,
-            }}>
-              <Lightning size={13} weight="regular" style={{ color: "var(--accent)" }} />
-            </div>
-            <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.3px" }}>Nexus</span>
-          </div>
-
           <RepoSelect
             repos={repos}
             activeRepo={activeRepo}
