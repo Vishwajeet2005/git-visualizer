@@ -450,6 +450,24 @@ function GraphPanel({
 // ─── Dashboard Root ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+
+  // Capture token from URL if present
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    if (token) {
+      localStorage.setItem('nexus_token', token);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  const getHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nexus_token') : null;
+    return {
+      "Content-Type": "application/json",
+      ...(token ? { "Authorization": "Bearer " + token } : {})
+    };
+  };
   const [repos, setRepos]         = useState<Repository[]>([]);
   const [activeRepo, setActiveRepo] = useState<Repository | null>(null);
   const [fileTree, setFileTree]   = useState<FileNode[]>([]);
@@ -473,7 +491,7 @@ export default function DashboardPage() {
 
   // ── Load & Poll repos ───────────────────────────────────────────────────────
   const fetchRepos = useCallback(() => {
-    return fetch(`${API}/api/repos`, { credentials: "include" })
+    return fetch(`${API}/api/repos`, { credentials: "include", headers: getHeaders() })
       .then((r) => r.json())
       .then((data: Repository[]) => {
         setRepos(data);
@@ -502,7 +520,7 @@ export default function DashboardPage() {
     try {
       const res = await fetch(`${API}/api/user/key`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getHeaders(),
         credentials: "include",
         body: JSON.stringify({ groq_api_key: groqKey })
       });
@@ -526,7 +544,7 @@ export default function DashboardPage() {
     try {
       const resp = await fetch(`${API}/api/repos`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getHeaders(),
         credentials: "include",
         body: JSON.stringify({ github_url: importUrl.trim() }),
       });
@@ -549,7 +567,7 @@ export default function DashboardPage() {
     if (!activeRepo) return;
     let isSubscribed = true;
 
-    fetch(`${API}/api/repos/${activeRepo.id}/graph`, { credentials: "include" })
+    fetch(`${API}/api/repos/${activeRepo.id}/graph`, { credentials: "include", headers: getHeaders() })
       .then(res => res.json())
       .then((data: GraphData) => {
         if (isSubscribed) {
@@ -598,7 +616,7 @@ export default function DashboardPage() {
     try {
       const resp = await fetch(`${API}/api/query/stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getHeaders(),
         credentials: "include",
         body: JSON.stringify({
           question: textToSend,
@@ -718,7 +736,7 @@ export default function DashboardPage() {
     try {
       const resp = await fetch(`${API}/api/tools/refactor-diff`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getHeaders(),
         credentials: "include",
         body: JSON.stringify({
           repository_id: activeRepo.id,

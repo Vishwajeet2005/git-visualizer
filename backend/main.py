@@ -98,10 +98,15 @@ async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
 
 
 async def get_current_user(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
+    request: Request, db: AsyncSession = Depends(get_db)
 ) -> User:
-    session_token = request.cookies.get("nexus_session")
+    auth_header = request.headers.get("Authorization")
+    session_token = None
+    if auth_header and auth_header.startswith("Bearer "):
+        session_token = auth_header[7:]
+    else:
+        session_token = request.cookies.get("nexus_session")
+        
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated.")
 
@@ -248,7 +253,7 @@ async def github_oauth_callback(
     user.session_token = session_token
     await db.commit()
     response = Response(status_code=302)
-    response.headers["Location"] = f"{FRONTEND_URL}/dashboard"
+    response.headers["Location"] = f"{FRONTEND_URL}/dashboard?token={session_token}"
     response.set_cookie(
         "nexus_session", session_token,
         httponly=True, secure=True, samesite="none", max_age=28800,
