@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
     engine     = create_engine(DATABASE_URL)
     db_factory = create_session_factory(engine)
     encryptor  = TokenEncryptor()
-    limiter    = None
+    limiter    = RateLimiter()
 
     app.state.db_factory = db_factory
     app.state.encryptor  = encryptor
