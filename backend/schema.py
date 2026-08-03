@@ -120,10 +120,10 @@ class User(Base):
 
     session_token: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True, index=True)
 
-    # BYOK: AES-256-GCM encrypted OpenAI API key
-    openai_api_key_enc: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
-    openai_api_key_iv: Mapped[Optional[bytes]]  = mapped_column(LargeBinary(16), nullable=True)
-    openai_api_key_tag: Mapped[Optional[bytes]] = mapped_column(LargeBinary(16), nullable=True)
+    # BYOK: AES-256-GCM encrypted Groq API key
+    groq_api_key_enc: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    groq_api_key_iv: Mapped[Optional[bytes]]  = mapped_column(LargeBinary(16), nullable=True)
+    groq_api_key_tag: Mapped[Optional[bytes]] = mapped_column(LargeBinary(16), nullable=True)
 
     plan: Mapped[str] = mapped_column(String(32), default="free", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -371,7 +371,7 @@ class VectorChunk(Base):
     last_commit_sha: Mapped[str] = mapped_column(String(40), nullable=False)
 
     # Vector representations
-    dense_vector = mapped_column(Vector(1536), nullable=False)
+    dense_vector: Mapped[list[float]] = mapped_column(Vector(384), nullable=False)
     sparse_vector = mapped_column(TSVECTOR, nullable=True)
 
     # Relationships
