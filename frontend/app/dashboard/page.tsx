@@ -82,6 +82,21 @@ interface MergedRepo {
   file_count?: number;
 }
 
+interface GithubRepo {
+  full_name: string;
+  private: boolean;
+  html_url: string;
+  updated_at: string;
+}
+
+interface MergedRepo {
+  full_name: string;
+  id?: string;
+  status: string;
+  chunk_count?: number;
+  file_count?: number;
+}
+
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
 const LANG_COLORS: Record<string, string> = {
@@ -483,7 +498,7 @@ export default function DashboardPage() {
       ...(token ? { "Authorization": "Bearer " + token } : {})
     };
   };
-  const [repos, setRepos]         = useState<Repository[]>([]);
+  const [repos, setRepos]         = useState<MergedRepo[]>([]);
   const [activeRepo, setActiveRepo] = useState<MergedRepo | null>(null);
   const [fileTree, setFileTree]   = useState<FileNode[]>([]);
   const [activeFile, setActiveFile] = useState<FileNode | null>(null);
@@ -505,14 +520,41 @@ export default function DashboardPage() {
   const abortRef = useRef<AbortController | null>(null);
 
   // ── Load & Poll repos ───────────────────────────────────────────────────────
-  const fetchRepos = useCallback(() => {
-    return fetch(`${API}/api/repos`, { credentials: "include", headers: getHeaders() })
-      .then((r) => r.json())
-      .then((data: Repository[]) => {
-        setRepos(data);
-        return data;
-      })
-      .catch(console.error);
+  const fetchRepos = useCallback(async () => {
+    try {
+      const [dbRes, ghRes] = await Promise.all([
+        fetch(`${API}/api/repos`, { credentials: "include", headers: getHeaders() }),
+        fetch(`${API}/api/github/repos`, { credentials: "include", headers: getHeaders() })
+      ]);
+      const dbRepos: Repository[] = dbRes.ok ? await dbRes.json() : [];
+      const ghRepos: GithubRepo[] = ghRes.ok ? await ghRes.json() : [];
+
+      const mergedMap = new Map<string, MergedRepo>();
+      
+      for (const gh of ghRepos) {
+        mergedMap.set(gh.full_name, {
+          full_name: gh.full_name,
+          status: 'unimported'
+        });
+      }
+
+      for (const db of dbRepos) {
+        mergedMap.set(db.full_name, {
+          full_name: db.full_name,
+          id: db.id,
+          status: db.status,
+          chunk_count: db.chunk_count,
+          file_count: db.file_count
+        });
+      }
+
+      const mergedArray = Array.from(mergedMap.values());
+      setRepos(mergedArray);
+      return mergedArray;
+    } catch (err) {
+      console.error("Failed to load repos:", err);
+      return undefined;
+    }
   }, []);
 
   useEffect(() => {
