@@ -67,7 +67,7 @@ interface Repository {
   file_count: number;
 }
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "";
+const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
 const LANG_COLORS: Record<string, string> = {
   python:     "#3b82f6",

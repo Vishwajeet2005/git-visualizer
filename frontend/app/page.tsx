@@ -227,8 +227,9 @@ export default function LandingPage() {
 
   function handleGitHubLogin() {
     setLoading(true);
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
     // Navigates to FastAPI OAuth initiation endpoint
-    window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/api/auth/github`;
+    window.location.href = `${apiBase}/api/auth/github`;
   }
 
   return (

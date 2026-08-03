@@ -40,7 +40,7 @@ from backend.security import CredentialPurgeService, RateLimiter, TokenEncryptor
 
 log = structlog.get_logger(__name__)
 
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 GITHUB_CLIENT_ID     = os.environ.get("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
 REDIS_URL            = os.environ.get("REDIS_URL", "redis://localhost:6379/0")

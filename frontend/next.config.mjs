@@ -16,7 +16,8 @@ const nextConfig = {
 
   // Proxy /api/* to the FastAPI backend during local dev
   async rewrites() {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    const rawApiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    const apiBase = rawApiBase.replace(/\/$/, "");
     return [
       {
         source: "/api/:path*",
