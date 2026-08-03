@@ -237,9 +237,14 @@ function RepoSelect({
                   onMouseLeave={e => { if (activeRepo?.full_name !== r.full_name) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-1)"; } }}
                 >
                   <GitBranch size={11} style={{ flexShrink: 0, color: "var(--text-2)" }} />
-                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--font-geist-mono)" }}>
-                    {r.full_name}
-                  </span>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                    <span style={{ fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--font-geist-mono)", color: activeRepo?.full_name === r.full_name ? "var(--text-0)" : "inherit" }}>
+                      {r.full_name.split("/")[1] || r.full_name}
+                    </span>
+                    <span style={{ fontSize: 9, color: "var(--text-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {r.full_name.split("/")[0]}
+                    </span>
+                  </div>
                   <StatusBadge status={r.status} />
                 </button>
               ))}
