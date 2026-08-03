@@ -36,7 +36,7 @@ export interface ImportRepoResponse {
 export interface QueryPayload {
   question:       string;
   repository_id:  string;
-  provider:       "openai" | "anthropic" | "ollama";
+  provider:       "groq" | "anthropic" | "ollama";
   system_prompt?: string;
 }
 
@@ -44,7 +44,7 @@ export interface TestGenPayload {
   repository_id: string;
   file_path:     string;
   symbol_name:   string;
-  provider:      "openai" | "anthropic" | "ollama";
+  provider:      "groq" | "anthropic" | "ollama";
 }
 
 export interface DiffPayload {
@@ -52,7 +52,7 @@ export interface DiffPayload {
   file_path:             string;
   symbol_name:           string;
   refactor_instruction:  string;
-  provider:              "openai" | "anthropic" | "ollama";
+  provider:              "groq" | "anthropic" | "ollama";
 }
 
 export interface DiffResult {
