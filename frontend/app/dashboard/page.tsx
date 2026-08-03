@@ -716,7 +716,7 @@ export default function DashboardPage() {
       });
       if (r.ok) { await fetchRepos(); }
       else { const d = await r.json().catch(() => ({})); alert(`Import failed: ${d.detail || r.statusText}`); }
-    } catch (e) { console.error(e); alert("Import failed."); }
+    } catch (e: any) { console.error(e); alert("Import failed: " + (e.message || "Unknown error")); }
     finally { setIsImporting(false); }
   }, [fetchRepos, isImporting]);
 
