@@ -211,20 +211,20 @@ function RepoSelect({
         onClick={() => setOpen(v => !v)}
         style={{
           width: "100%", display: "flex", alignItems: "center", gap: 7,
-          padding: "6px 10px", borderRadius: "var(--r2)",
-          background: "var(--bg-2)", border: "1px solid var(--border-0)",
+          padding: "8px 10px",
+          background: "transparent", border: "1px solid transparent",
           color: "var(--text-0)", fontSize: 12, cursor: "pointer",
-          transition: "border-color 120ms cubic-bezier(0.23,1,0.32,1), background 120ms cubic-bezier(0.23,1,0.32,1)",
+          transition: "background 120ms cubic-bezier(0.23,1,0.32,1)",
         }}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--border-1)")}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border-0)")}
+        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
       >
         <GitBranch size={13} weight="regular" style={{ color: "var(--text-2)", flexShrink: 0 }} />
         <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {label}
         </span>
         {isImporting
-          ? <CircleNotch size={12} weight="regular" className="animate-spin" style={{ color: "var(--accent)" }} />
+          ? <CircleNotch size={12} weight="regular" className="animate-spin" style={{ color: "var(--text-2)" }} />
           : <Code size={12} weight="regular" style={{ color: "var(--text-2)" }} />
         }
       </button>
@@ -377,20 +377,10 @@ function ChatPanel({
       {/* Messages */}
       <div style={{ flex: 1, overflowY: "auto", padding: "14px", display: "flex", flexDirection: "column", gap: 12 }}>
         {messages.length === 0 && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 12, textAlign: "center", padding: "40px 20px" }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: "var(--r3)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              background: "var(--accent-dim)", border: "1px solid var(--accent-border)",
-            }}>
-              <Lightning size={16} weight="regular" style={{ color: "var(--accent)" }} />
-            </div>
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-0)", marginBottom: 5 }}>Ask about your codebase</p>
-              <p style={{ fontSize: 11, color: "var(--text-2)", lineHeight: 1.6, maxWidth: 200 }}>
-                Select a file for targeted context, or ask broadly.
-              </p>
-            </div>
+          <div style={{ padding: "10px" }}>
+            <p data-mono style={{ fontSize: 11, color: "var(--text-2)" }}>
+              // System ready. Awaiting prompt.
+            </p>
           </div>
         )}
 
@@ -467,26 +457,19 @@ function ChatPanel({
       </div>
 
       {/* Input */}
-      <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border-0)", flexShrink: 0 }}>
-        <div
-          className="bezel-inner"
-          style={{
-            display: "flex", alignItems: "flex-end", gap: 8,
-            padding: "8px 10px",
-            transition: "border-color 120ms cubic-bezier(0.23,1,0.32,1)",
-          }}
-        >
+      <div style={{ borderTop: "1px solid var(--border-0)", flexShrink: 0, background: "var(--bg-0)" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", padding: "10px 14px", gap: 8 }}>
           <textarea
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
             }}
-            placeholder="Ask about the codebase"
+            placeholder="Ask about the codebase..."
             rows={1}
             style={{
               flex: 1, resize: "none", background: "transparent",
-              color: "var(--text-0)", fontSize: 12, lineHeight: 1.6,
+              color: "var(--text-0)", fontSize: 13, lineHeight: 1.6,
               border: "none", outline: "none",
               maxHeight: 112, overflowY: "auto",
               fontFamily: "var(--font-geist-sans)",
@@ -495,20 +478,20 @@ function ChatPanel({
           <button
             onClick={onSend}
             disabled={!input.trim() || loading}
-            className="btn-accent"
-            style={{ flexShrink: 0, padding: "5px 10px", borderRadius: "var(--r1)" }}
+            className="btn-ghost"
+            style={{ flexShrink: 0, padding: "6px", color: input.trim() ? "var(--text-0)" : "var(--text-2)" }}
           >
             {loading
-              ? <CircleNotch size={12} weight="regular" className="animate-spin" />
-              : <PaperPlaneRight size={12} weight="regular" />}
+              ? <CircleNotch size={14} weight="regular" className="animate-spin" />
+              : <PaperPlaneRight size={14} weight="regular" />}
           </button>
         </div>
-        <p style={{ fontSize: 10, color: "var(--text-2)", marginTop: 8, paddingLeft: 2, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 14px 10px", fontSize: 10, color: "var(--text-2)" }}>
           <span>Enter to send, Shift+Enter for newline</span>
           <span style={{ display: "flex", alignItems: "center", gap: 4, opacity: 0.8 }}>
-            <WarningCircle size={10} weight="regular" /> AI can make mistakes. Verify important information.
+            <WarningCircle size={10} weight="regular" /> AI can make mistakes.
           </span>
-        </p>
+        </div>
       </div>
     </div>
   );
@@ -648,11 +631,11 @@ function TabBar({
           onClick={() => onChange(tab.key)}
           style={{
             display: "flex", alignItems: "center", gap: 5, height: "100%",
-            padding: "0 10px", fontSize: 11, fontWeight: 500,
+            padding: "0 10px", fontSize: 11, fontWeight: active === tab.key ? 500 : 400,
             border: "none", background: "transparent", cursor: "pointer",
-            borderBottom: `2px solid ${active === tab.key ? "var(--accent)" : "transparent"}`,
+            borderBottom: active === tab.key ? "1px solid var(--text-0)" : "1px solid transparent",
             color: active === tab.key ? "var(--text-0)" : "var(--text-2)",
-            transition: "color 120ms cubic-bezier(0.23,1,0.32,1), border-color 120ms cubic-bezier(0.23,1,0.32,1)",
+            transition: "color 120ms ease, border-color 120ms ease",
           }}
         >
           {tab.icon}
@@ -957,16 +940,12 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* File search */}
-        <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border-0)" }}>
-          <div
-            className="bezel-inner"
-            style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 9px" }}
-          >
+        <div style={{ borderBottom: "1px solid var(--border-0)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 10px" }}>
             <MagnifyingGlass size={12} weight="regular" style={{ color: "var(--text-2)", flexShrink: 0 }} />
             <input
               type="text"
-              placeholder="Search files"
+              placeholder="Search files..."
               value={fileSearch}
               onChange={e => setFileSearch(e.target.value)}
               style={{
@@ -1049,11 +1028,11 @@ export default function DashboardPage() {
             onClick={() => setRightTab("graph")}
             style={{
               display: "flex", alignItems: "center", gap: 5, height: "100%",
-              padding: "0 10px", fontSize: 11, fontWeight: 500,
+              padding: "0 10px", fontSize: 11, fontWeight: rightTab === "graph" ? 500 : 400,
               border: "none", background: "transparent", cursor: "pointer",
-              borderBottom: `2px solid ${rightTab === "graph" ? "var(--accent)" : "transparent"}`,
+              borderBottom: rightTab === "graph" ? "1px solid var(--text-0)" : "1px solid transparent",
               color: rightTab === "graph" ? "var(--text-0)" : "var(--text-2)",
-              transition: "color 120ms cubic-bezier(0.23,1,0.32,1), border-color 120ms cubic-bezier(0.23,1,0.32,1)",
+              transition: "color 120ms ease, border-color 120ms ease",
             }}
           >
             <Graph size={12} weight="regular" /> Dependency graph
@@ -1080,12 +1059,11 @@ export default function DashboardPage() {
           {graphData.nodes.length > 0 ? (
             <GraphPanel data={graphData} onNodeClick={handleNodeClick} highlightedNodes={highlighted} />
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 10 }}>
-              <Graph size={28} weight="thin" style={{ color: "var(--text-2)" }} />
-              <p style={{ fontSize: 12, color: "var(--text-2)", textAlign: "center" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", height: "100%", padding: "10px" }}>
+              <p data-mono style={{ fontSize: 11, color: "var(--text-2)" }}>
                 {activeRepo
-                  ? activeRepo.status !== "ready" ? "Indexing repository" : "Loading graph"
-                  : "Select a repository to view the dependency graph"}
+                  ? activeRepo.status !== "ready" ? "// Indexing repository..." : "// Loading graph..."
+                  : "// Awaiting repository selection."}
               </p>
             </div>
           )}
