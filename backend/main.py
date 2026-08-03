@@ -318,9 +318,13 @@ async def list_github_repos(
     async with httpx.AsyncClient() as client:
         gh_resp = await client.get(
             "https://api.github.com/user/repos?per_page=100&sort=updated",
-            headers={"Authorization": f"Bearer {plain_token}"}
+            headers={
+                "Authorization": f"Bearer {plain_token}",
+                "User-Agent": "Nexus/1.0"
+            }
         )
         if gh_resp.status_code != 200:
+            print(f"GitHub API Error: {gh_resp.status_code} {gh_resp.text}")
             raise HTTPException(status_code=400, detail="Failed to fetch repositories from GitHub.")
             
         repos = gh_resp.json()
