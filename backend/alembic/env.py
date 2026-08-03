@@ -18,7 +18,12 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-DATABASE_URL = os.environ["DATABASE_URL"]
+raw_url = os.environ.get("DATABASE_URL", "")
+if raw_url.startswith("postgres://"):
+    raw_url = raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif raw_url.startswith("postgresql://"):
+    raw_url = raw_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+DATABASE_URL = raw_url
 
 
 # ── Offline migrations (generate SQL without live DB) ─────────────────────────
