@@ -10,7 +10,7 @@ import secrets
 import time
 from typing import Optional
 
-import redis.asyncio as aioredis
+
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 # ─── AES-256-GCM Encryption ───────────────────────────────────────────────────
@@ -47,77 +47,15 @@ class TokenEncryptor:
         return plaintext.decode("utf-8")
 
 
-# ─── Redis Token-Bucket Rate Limiter ─────────────────────────────────────────
-
-RATE_LIMIT_SCRIPT = """
-local key      = KEYS[1]
-local capacity = tonumber(ARGV[1])
-local refill   = tonumber(ARGV[2])
-local now      = tonumber(ARGV[3])
-local cost     = tonumber(ARGV[4])
-
-local data = redis.call('HMGET', key, 'tokens', 'last_refill')
-local tokens     = tonumber(data[1]) or capacity
-local last_refill = tonumber(data[2]) or now
-
-local elapsed = math.max(0, now - last_refill)
-local new_tokens = math.min(capacity, tokens + elapsed * refill)
-new_tokens = new_tokens - cost
-
-if new_tokens < 0 then
-    redis.call('HMSET', key, 'tokens', tokens, 'last_refill', now)
-    redis.call('EXPIRE', key, 86400)
-    return 0
-end
-
-redis.call('HMSET', key, 'tokens', new_tokens, 'last_refill', now)
-redis.call('EXPIRE', key, 86400)
-return 1
-"""
-
-
 class RateLimiter:
     """
-    Per-user token-bucket rate limiter backed by Redis.
-    Default: 60 requests/min (capacity=60, refill=1 token/sec).
+    Dummy Rate Limiter for free tier deployment.
     """
-
-    def __init__(
-        self,
-        redis_url: str,
-        capacity: int = 60,
-        refill_rate: float = 1.0,   # tokens per second
-    ) -> None:
-        self._redis       = aioredis.from_url(redis_url, decode_responses=False)
-        self._capacity    = capacity
-        self._refill_rate = refill_rate
-        self._script: Optional[aioredis.client.Script] = None
-
-    async def _get_script(self):
-        if self._script is None:
-            self._script = self._redis.register_script(RATE_LIMIT_SCRIPT)
-        return self._script
-
-    async def is_allowed(self, user_id: str, cost: int = 1) -> bool:
-        """Returns True if the request is within rate limits."""
-        script = await self._get_script()
-        key    = f"ratelimit:{user_id}"
-        now    = time.time()
-        result = await script(
-            keys=[key],
-            args=[self._capacity, self._refill_rate, now, cost],
-        )
-        return bool(result)
+    def __init__(self, *args, **kwargs) -> None:
+        pass
 
     async def check_or_raise(self, user_id: str, cost: int = 1) -> None:
-        """Raise HTTP 429 if rate limit exceeded."""
-        from fastapi import HTTPException
-        if not await self.is_allowed(user_id, cost):
-            raise HTTPException(
-                status_code=429,
-                detail="Rate limit exceeded. Please retry after a moment.",
-                headers={"Retry-After": "60"},
-            )
+        pass
 
 
 # ─── Credential Purge Service ─────────────────────────────────────────────────

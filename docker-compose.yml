@@ -1,55 +1,44 @@
-version: "3.9"
-
-# ── Shared networks ─────────────────────────────────────────────────────────
+version: '3.9'
 networks:
   nexus_internal:
     driver: bridge
   nexus_public:
     driver: bridge
-
-# ── Named volumes ────────────────────────────────────────────────────────────
 volumes:
-  postgres_data:
-
-  redis_data:
-  prometheus_data:
-  grafana_data:
-
-# ── Shared environment anchors ───────────────────────────────────────────────
-x-api-env: &api-env
-  DATABASE_URL:        postgresql+asyncpg://nexus:${POSTGRES_PASSWORD}@postgres:5432/nexus
-  REDIS_URL:           redis://:${REDIS_PASSWORD}@redis:6379/0
-
-  OPENAI_API_KEY:      ${OPENAI_API_KEY}
-  ANTHROPIC_API_KEY:   ${ANTHROPIC_API_KEY}
-  GITHUB_CLIENT_ID:    ${GITHUB_CLIENT_ID}
+  postgres_data: null
+  prometheus_data: null
+  grafana_data: null
+x-api-env:
+  DATABASE_URL: postgresql+asyncpg://nexus:${POSTGRES_PASSWORD}@postgres:5432/nexus
+  OPENAI_API_KEY: ${OPENAI_API_KEY}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
   GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
-  AES_SECRET_KEY:      ${AES_SECRET_KEY}
-  FRONTEND_URL:        ${FRONTEND_URL:-http://localhost:3000}
-  EMBED_PROVIDER:      ${EMBED_PROVIDER:-openai}
-  OPENAI_MODEL:        ${OPENAI_MODEL:-gpt-4o}
-  OLLAMA_BASE_URL:     ${OLLAMA_BASE_URL:-http://ollama:11434}
-  OLLAMA_MODEL:        ${OLLAMA_MODEL:-deepseek-coder:6.7b}
-
+  AES_SECRET_KEY: ${AES_SECRET_KEY}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+  EMBED_PROVIDER: ${EMBED_PROVIDER:-openai}
+  OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+  OLLAMA_MODEL: ${OLLAMA_MODEL:-deepseek-coder:6.7b}
 services:
-
-  # ── PostgreSQL ─────────────────────────────────────────────────────────────
   postgres:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     ports:
-      - "5432:5432"
+    - 5432:5432
     environment:
-      POSTGRES_DB:       nexus
-      POSTGRES_USER:     nexus
+      POSTGRES_DB: nexus
+      POSTGRES_USER: nexus
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      PGDATA:            /var/lib/postgresql/data/pgdata
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+    - postgres_data:/var/lib/postgresql/data
     networks:
-      - nexus_internal
+    - nexus_internal
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nexus -d nexus"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U nexus -d nexus
       interval: 10s
       timeout: 5s
       retries: 5
@@ -57,29 +46,6 @@ services:
       resources:
         limits:
           memory: 1g
-
-  # ── Redis ──────────────────────────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: >
-      redis-server
-      --requirepass ${REDIS_PASSWORD}
-      --maxmemory 512mb
-      --maxmemory-policy allkeys-lru
-      --save 60 1000
-      --appendonly yes
-    volumes:
-      - redis_data:/data
-    networks:
-      - nexus_internal
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
-  # ── FastAPI Backend ────────────────────────────────────────────────────────
   api:
     build:
       context: ./backend
@@ -87,20 +53,33 @@ services:
       target: production
     restart: unless-stopped
     environment:
-      <<: *api-env
-      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: postgresql+asyncpg://nexus:${POSTGRES_PASSWORD}@postgres:5432/nexus
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      AES_SECRET_KEY: ${AES_SECRET_KEY}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      EMBED_PROVIDER: ${EMBED_PROVIDER:-openai}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-deepseek-coder:6.7b}
+      PYTHONUNBUFFERED: '1'
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
-      - nexus_internal
-      - nexus_public
+    - nexus_internal
+    - nexus_public
     ports:
-      - "8000:8000"
+    - 8000:8000
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:8000/api/health
       interval: 30s
       timeout: 10s
       retries: 3
@@ -109,89 +88,10 @@ services:
       resources:
         limits:
           memory: 1g
-    command: >
-      uvicorn main:app
-      --host 0.0.0.0
-      --port 8000
-      --workers 2
-      --loop uvloop
+    command: 'uvicorn main:app --host 0.0.0.0 --port 8000 --workers 2 --loop uvloop
       --no-access-log
 
-  # ── Celery Workers (ingestion) ─────────────────────────────────────────────
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: production
-    restart: unless-stopped
-    environment:
-      <<: *api-env
-      PYTHONUNBUFFERED: "1"
-      C_FORCE_ROOT: "1"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - nexus_internal
-    deploy:
-      replicas: 2
-      resources:
-        limits:
-          memory: 2g
-    command: >
-      celery -A ingestion_worker.celery_app worker
-      --loglevel=info
-      --concurrency=2
-      --queues=ingestion,default
-      --max-tasks-per-child=50
-      --time-limit=900
-      --soft-time-limit=600
-
-  # ── Celery Beat (scheduled tasks: credential purge) ───────────────────────
-  beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: production
-    restart: unless-stopped
-    environment:
-      <<: *api-env
-      PYTHONUNBUFFERED: "1"
-    depends_on:
-      - redis
-      - postgres
-    networks:
-      - nexus_internal
-    command: >
-      celery -A ingestion_worker.celery_app beat
-      --loglevel=info
-      --scheduler django_celery_beat.schedulers:DatabaseScheduler
-
-  # ── Celery Flower (monitoring UI) ─────────────────────────────────────────
-  flower:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: production
-    restart: unless-stopped
-    environment:
-      <<: *api-env
-      FLOWER_BASIC_AUTH: ${FLOWER_USER}:${FLOWER_PASSWORD}
-    depends_on:
-      - redis
-    networks:
-      - nexus_internal
-      - nexus_public
-    ports:
-      - "5555:5555"
-    command: >
-      celery -A backend.workers.ingestion_worker.celery_app flower
-      --port=5555
-      --broker_api=redis://:${REDIS_PASSWORD}@redis:6379/0
-
-  # ── Next.js Frontend ───────────────────────────────────────────────────────
+      '
   web:
     build:
       context: ./frontend
@@ -202,48 +102,48 @@ services:
     environment:
       NODE_ENV: production
     networks:
-      - nexus_public
+    - nexus_public
     ports:
-      - "3000:3000"
+    - 3000:3000
     depends_on:
-      - api
+    - api
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:3000
       interval: 30s
       timeout: 10s
       retries: 3
-
-  # ── Prometheus ─────────────────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.51.0
     restart: unless-stopped
     volumes:
-      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
+    - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - prometheus_data:/prometheus
     networks:
-      - nexus_internal
+    - nexus_internal
     command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=30d"
-      - "--web.enable-lifecycle"
-
-  # ── Grafana ────────────────────────────────────────────────────────────────
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.path=/prometheus
+    - --storage.tsdb.retention.time=30d
+    - --web.enable-lifecycle
   grafana:
     image: grafana/grafana:10.4.0
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
-      GF_USERS_ALLOW_SIGN_UP:     "false"
-      GF_SERVER_ROOT_URL:         ${GRAFANA_URL:-http://localhost:3001}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_SERVER_ROOT_URL: ${GRAFANA_URL:-http://localhost:3001}
     volumes:
-      - grafana_data:/var/lib/grafana
-      - ./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-      - ./infra/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    - grafana_data:/var/lib/grafana
+    - ./infra/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    - ./infra/grafana/datasources:/etc/grafana/provisioning/datasources:ro
     networks:
-      - nexus_internal
-      - nexus_public
+    - nexus_internal
+    - nexus_public
     ports:
-      - "3001:3000"
+    - 3001:3000
     depends_on:
-      - prometheus
+    - prometheus

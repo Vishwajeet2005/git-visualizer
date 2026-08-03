@@ -35,7 +35,8 @@ from backend.schema import (
     create_session_factory,
 )
 from backend.query_service import QueryService, InferenceProvider
-from backend.ingestion_worker import celery_app, ingest_repository
+from fastapi import BackgroundTasks
+from backend.ingestion_service import ingest_repository
 from backend.security import CredentialPurgeService, RateLimiter, TokenEncryptor
 
 log = structlog.get_logger(__name__)
@@ -43,7 +44,6 @@ log = structlog.get_logger(__name__)
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 GITHUB_CLIENT_ID     = os.environ.get("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
-REDIS_URL            = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 raw_url = os.environ.get("DATABASE_URL", "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus")
 if raw_url.startswith("postgres://"):
     raw_url = raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
     engine     = create_engine(DATABASE_URL)
     db_factory = create_session_factory(engine)
     encryptor  = TokenEncryptor()
-    limiter    = RateLimiter(redis_url=REDIS_URL, capacity=60, refill_rate=1.0)
+    limiter    = None
 
     app.state.db_factory = db_factory
     app.state.encryptor  = encryptor
@@ -105,17 +105,11 @@ async def get_current_user(
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated.")
 
-    import redis.asyncio as aioredis
-    redis = aioredis.from_url(REDIS_URL, decode_responses=True)
-    user_id = await redis.get(f"session:{session_token}")
-    await redis.aclose()
+    stmt = select(User).where(User.session_token == session_token)
+    user = (await db.execute(stmt)).scalar_one_or_none()
 
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Session expired.")
-
-    user = await db.get(User, uuid.UUID(user_id))
     if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="User not found or deactivated.")
+        raise HTTPException(status_code=401, detail="Session expired or user deactivated.")
     return user
 
 
@@ -193,8 +187,6 @@ async def github_oauth_callback(
 ):
     """Exchange code for token, upsert user, create session cookie."""
     import secrets
-    import redis.asyncio as aioredis
-
     stored_state = request.cookies.get("oauth_state")
     if not stored_state or stored_state != state:
         raise HTTPException(status_code=400, detail="Invalid OAuth state.")
@@ -254,10 +246,8 @@ async def github_oauth_callback(
     await db.refresh(user)
 
     session_token = secrets.token_urlsafe(48)
-    redis = aioredis.from_url(REDIS_URL, decode_responses=True)
-    await redis.set(f"session:{session_token}", str(user.id), ex=28800)
-    await redis.aclose()
-
+    user.session_token = session_token
+    await db.commit()
     response = Response(status_code=302)
     response.headers["Location"] = f"{FRONTEND_URL}/dashboard"
     response.set_cookie(
@@ -269,13 +259,14 @@ async def github_oauth_callback(
 
 
 @app.post("/api/auth/logout")
-async def logout(request: Request):
-    import redis.asyncio as aioredis
+async def logout(request: Request, db: AsyncSession = Depends(get_db)):
     session_token = request.cookies.get("nexus_session")
     if session_token:
-        redis = aioredis.from_url(REDIS_URL, decode_responses=True)
-        await redis.delete(f"session:{session_token}")
-        await redis.aclose()
+        stmt = select(User).where(User.session_token == session_token)
+        user = (await db.execute(stmt)).scalar_one_or_none()
+        if user:
+            user.session_token = None
+            await db.commit()
     response = Response(status_code=200)
     response.delete_cookie("nexus_session")
     return response
@@ -337,6 +328,7 @@ async def list_repos(
 async def import_repo(
     body: RepoImportRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     _: None = Depends(rate_limit),
@@ -380,11 +372,12 @@ async def import_repo(
         await db.commit()
         await db.refresh(repo)
 
-    task = ingest_repository.delay(str(repo.id), plain_token)
-    repo.celery_task_id = task.id
+    task_id = "bg-" + str(uuid.uuid4())
+    background_tasks.add_task(ingest_repository, str(repo.id), plain_token)
+    repo.celery_task_id = task_id
     await db.commit()
 
-    return {"repository_id": str(repo.id), "task_id": task.id, "status": "queued"}
+    return {"repository_id": str(repo.id), "task_id": task_id, "status": "queued"}
 
 
 @app.get("/api/repos/{repo_id}")

@@ -118,6 +118,8 @@ class User(Base):
     token_tag: Mapped[Optional[bytes]]       = mapped_column(LargeBinary(16), nullable=True)
     token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
+    session_token: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, unique=True, index=True)
+
     # BYOK: AES-256-GCM encrypted OpenAI API key
     openai_api_key_enc: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
     openai_api_key_iv: Mapped[Optional[bytes]]  = mapped_column(LargeBinary(16), nullable=True)
