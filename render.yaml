@@ -1,10 +1,12 @@
 databases:
 - name: nexus-db
+  plan: free
   databaseName: nexus
   user: nexus
 services:
 - type: web
   name: nexus-api
+  plan: free
   env: docker
   dockerfilePath: Dockerfile
   dockerContext: backend
