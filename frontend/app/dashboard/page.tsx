@@ -1,176 +1,151 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import dynamic from "next/dynamic";
-import { motion, AnimatePresence } from "framer-motion";
 import {
-  Zap, Settings, ChevronRight, Folder, File, Search,
-  GitBranch, Layers, MessageSquare, Code2, X, Send,
-  Loader2, CheckCircle2, Clock, Download, FlaskConical,
-  RefreshCw, AlertCircle, Circle, ChevronDown,
-} from "lucide-react";
+  useCallback, useEffect, useRef, useState, useMemo,
+} from "react";
+import dynamic from "next/dynamic";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import {
+  GitBranch, FolderOpen, FolderSimple, File, MagnifyingGlass,
+  Lightning, Gear, PaperPlaneRight, ArrowsClockwise, Flask,
+  Code, Rows, X, Check, Download, CircleNotch,
+  WarningCircle, Graph,
+} from "@phosphor-icons/react";
 
-// ── Dynamic imports (client-only heavy deps) ──────────────────────────────────
+// ── Dynamic imports ───────────────────────────────────────────────────────────
 const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
   ssr: false,
   loading: () => (
-    <div className="flex flex-col items-center justify-center h-full gap-3">
-      <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
-      <span className="text-xs text-neutral-500">Initialising 3D engine…</span>
+    <div className="flex flex-col items-center justify-center h-full gap-2.5">
+      <CircleNotch size={18} className="text-blue-500 animate-spin" weight="regular" />
+      <span style={{ fontSize: 11, color: "var(--text-2)" }}>Loading 3D engine</span>
     </div>
   ),
 });
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ── Easing constants ──────────────────────────────────────────────────────────
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
+const SPRING = { type: "spring", duration: 0.4, bounce: 0.1 } as const;
 
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface FileNode {
-  id: string;
-  name: string;
-  path: string;
-  type: "file" | "directory";
-  children?: FileNode[];
-  language?: string;
+  id: string; name: string; path: string;
+  type: "file" | "directory"; children?: FileNode[]; language?: string;
 }
-
 interface GraphNode {
-  id: string;
-  name: string;
-  file_path: string;
-  node_type: string;
-  language: string;
-  val: number;
-  color?: string;
+  id: string; name: string; file_path: string;
+  node_type: string; language: string; val: number; color?: string;
 }
-
-interface GraphLink {
-  source: string;
-  target: string;
-  type: "call" | "import";
-}
-
-interface GraphData {
-  nodes: GraphNode[];
-  links: GraphLink[];
-}
-
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-}
-
-interface DiffResult {
-  before: string;
-  after: string;
-  explanation: string;
-}
-
+interface GraphLink { source: string; target: string; type: "call" | "import"; }
+interface GraphData { nodes: GraphNode[]; links: GraphLink[]; }
+interface ChatMessage { id: string; role: "user" | "assistant"; content: string; timestamp: Date; }
+interface DiffResult { before: string; after: string; explanation: string; }
 interface Repository {
-  id: string;
-  full_name: string;
-  status: string;
-  chunk_count: number;
-  file_count: number;
+  id: string; full_name: string; status: string;
+  chunk_count: number; file_count: number;
 }
-
 interface GithubRepo {
-  full_name: string;
-  private: boolean;
-  html_url: string;
-  updated_at: string;
+  full_name: string; private: boolean; html_url: string; updated_at: string;
 }
-
 interface MergedRepo {
-  full_name: string;
-  id?: string;
-  status: string;
-  chunk_count?: number;
-  file_count?: number;
+  full_name: string; id?: string; status: string;
+  chunk_count?: number; file_count?: number;
 }
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
 const LANG_COLORS: Record<string, string> = {
-  python:     "#3b82f6",
-  typescript: "#a78bfa",
-  javascript: "#fbbf24",
-  go:         "#34d399",
-  rust:       "#f97316",
-  java:       "#fb7185",
+  python: "#3b82f6", typescript: "#8b5cf6", javascript: "#f59e0b",
+  go: "#10b981", rust: "#f97316", java: "#f43f5e",
 };
 
-// ─── Status Badge ─────────────────────────────────────────────────────────────
-
+// ── Status badge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
-  if (status === "ready" || status === "READY") {
+  const s = status.toLowerCase();
+  if (s === "ready") {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 rounded-full px-2 py-0.5">
-        <CheckCircle2 className="w-2.5 h-2.5" /> Ready
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        fontSize: 10, fontWeight: 500, fontFamily: "var(--font-geist-mono)",
+        color: "var(--addition)", background: "rgba(16,185,129,0.10)",
+        border: "1px solid rgba(16,185,129,0.22)", borderRadius: "var(--r1)",
+        padding: "2px 7px",
+      }}>
+        <Check size={9} weight="bold" /> ready
       </span>
     );
   }
-  if (status === "unimported") {
+  if (s === "unimported") {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-neutral-500 bg-white/4 border border-white/8 rounded-full px-2 py-0.5">
-        <Download className="w-2.5 h-2.5" /> Import
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        fontSize: 10, fontWeight: 500, fontFamily: "var(--font-geist-mono)",
+        color: "var(--text-2)", background: "rgba(255,255,255,0.04)",
+        border: "1px solid var(--border-0)", borderRadius: "var(--r1)",
+        padding: "2px 7px",
+      }}>
+        <Download size={9} weight="regular" /> import
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-full px-2 py-0.5">
-      <Clock className="w-2.5 h-2.5 animate-pulse" /> {status}
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      fontSize: 10, fontWeight: 500, fontFamily: "var(--font-geist-mono)",
+      color: "#f59e0b", background: "rgba(245,158,11,0.10)",
+      border: "1px solid rgba(245,158,11,0.22)", borderRadius: "var(--r1)",
+      padding: "2px 7px",
+    }}>
+      <CircleNotch size={9} weight="regular" className="animate-spin" /> {s}
     </span>
   );
 }
 
-// ─── File Tree ────────────────────────────────────────────────────────────────
-
+// ── File tree node ────────────────────────────────────────────────────────────
 function FileTreeNode({
   node, depth, onSelect, selected,
 }: {
-  node: FileNode;
-  depth: number;
-  onSelect: (n: FileNode) => void;
-  selected: string | null;
+  node: FileNode; depth: number;
+  onSelect: (n: FileNode) => void; selected: string | null;
 }) {
   const [open, setOpen] = useState(depth < 2);
   const isSelected = selected === node.id;
+  const rm = useReducedMotion();
 
   if (node.type === "directory") {
     return (
       <div>
         <button
-          onClick={() => setOpen(!open)}
+          onClick={() => setOpen(v => !v)}
           className="sidebar-item"
-          style={{ paddingLeft: `${8 + depth * 14}px` }}
+          style={{ paddingLeft: 8 + depth * 13 }}
         >
           <motion.span
             animate={{ rotate: open ? 90 : 0 }}
-            transition={{ duration: 0.15, ease: "easeInOut" }}
-            className="shrink-0 text-neutral-600"
+            transition={rm ? { duration: 0 } : { duration: 0.15, ease: EASE_OUT }}
+            style={{ display: "inline-flex", color: "var(--text-2)" }}
           >
-            <ChevronRight className="w-3 h-3" />
+            {open
+              ? <FolderOpen size={13} weight="regular" />
+              : <FolderSimple size={13} weight="regular" />}
           </motion.span>
-          <Folder className="w-3 h-3 shrink-0 text-amber-400/70" />
-          <span className="truncate text-[11px]">{node.name}</span>
+          <span style={{ fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {node.name}
+          </span>
         </button>
         <AnimatePresence initial={false}>
           {open && (
             <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.18, ease: "easeInOut" }}
-              style={{ overflow: "hidden" }}
+              key="children"
+              initial={rm ? {} : { opacity: 0 }}
+              animate={rm ? {} : { opacity: 1 }}
+              exit={rm ? {} : { opacity: 0 }}
+              transition={{ duration: 0.14, ease: EASE_OUT }}
             >
-              {node.children?.map((child) => (
+              {node.children?.map(child => (
                 <FileTreeNode
-                  key={child.id}
-                  node={child}
-                  depth={depth + 1}
-                  onSelect={onSelect}
-                  selected={selected}
+                  key={child.id} node={child} depth={depth + 1}
+                  onSelect={onSelect} selected={selected}
                 />
               ))}
             </motion.div>
@@ -184,15 +159,19 @@ function FileTreeNode({
     <button
       onClick={() => onSelect(node)}
       className={`sidebar-item ${isSelected ? "active" : ""}`}
-      style={{ paddingLeft: `${8 + depth * 14}px` }}
+      style={{ paddingLeft: 8 + depth * 13 }}
     >
-      <File className="w-3 h-3 shrink-0 text-neutral-600" />
-      <span className="truncate text-[11px]">{node.name}</span>
+      <File size={12} weight="regular" style={{ color: "var(--text-2)", flexShrink: 0 }} />
+      <span style={{ fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+        {node.name}
+      </span>
       {node.language && (
         <span
-          className="ml-auto shrink-0 text-[9px] font-mono px-1.5 py-px rounded-sm font-semibold"
+          data-mono
           style={{
-            background: `${LANG_COLORS[node.language] ?? "#888"}18`,
+            fontSize: 9, padding: "1px 5px", borderRadius: "var(--r1)",
+            flexShrink: 0, fontWeight: 600,
+            background: `${LANG_COLORS[node.language] ?? "#888"}14`,
             color: LANG_COLORS[node.language] ?? "#888",
           }}
         >
@@ -203,119 +182,213 @@ function FileTreeNode({
   );
 }
 
-// ─── Diff Viewer ──────────────────────────────────────────────────────────────
+// ── Repo selector ─────────────────────────────────────────────────────────────
+function RepoSelect({
+  repos, activeRepo, onSelect, isImporting,
+}: {
+  repos: MergedRepo[]; activeRepo: MergedRepo | null;
+  onSelect: (r: MergedRepo) => void; isImporting: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const rm = useReducedMotion();
 
+  useEffect(() => {
+    const fn = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", fn);
+    return () => document.removeEventListener("mousedown", fn);
+  }, []);
+
+  const label = activeRepo
+    ? activeRepo.full_name.split("/")[1]
+    : "Select repository";
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", gap: 7,
+          padding: "6px 10px", borderRadius: "var(--r2)",
+          background: "var(--bg-2)", border: "1px solid var(--border-0)",
+          color: "var(--text-0)", fontSize: 12, cursor: "pointer",
+          transition: "border-color 120ms cubic-bezier(0.23,1,0.32,1), background 120ms cubic-bezier(0.23,1,0.32,1)",
+        }}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--border-1)")}
+        onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border-0)")}
+      >
+        <GitBranch size={13} weight="regular" style={{ color: "var(--text-2)", flexShrink: 0 }} />
+        <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {label}
+        </span>
+        {isImporting
+          ? <CircleNotch size={12} weight="regular" className="animate-spin" style={{ color: "var(--accent)" }} />
+          : <Code size={12} weight="regular" style={{ color: "var(--text-2)" }} />
+        }
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={rm ? {} : { opacity: 0, scale: 0.96, y: -4 }}
+            animate={rm ? {} : { opacity: 1, scale: 1, y: 0 }}
+            exit={rm ? {} : { opacity: 0, scale: 0.96, y: -4 }}
+            transition={rm ? { duration: 0 } : { duration: 0.18, ease: EASE_OUT }}
+            className="bezel"
+            style={{
+              position: "absolute", top: "calc(100% + 5px)", left: 0, right: 0,
+              zIndex: 50, overflow: "hidden",
+            }}
+          >
+            <div style={{ maxHeight: 240, overflowY: "auto", padding: "4px 0" }}>
+              {repos.length === 0 ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "16px 12px", fontSize: 11, color: "var(--text-2)" }}>
+                  <CircleNotch size={13} className="animate-spin" weight="regular" /> Loading
+                </div>
+              ) : repos.map(r => (
+                <button
+                  key={r.full_name}
+                  onClick={() => { onSelect(r); setOpen(false); }}
+                  style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: 8,
+                    padding: "6px 10px", fontSize: 11, textAlign: "left",
+                    cursor: "pointer", border: "none",
+                    background: activeRepo?.full_name === r.full_name ? "var(--accent-dim)" : "transparent",
+                    color: activeRepo?.full_name === r.full_name ? "var(--accent-text)" : "var(--text-1)",
+                    transition: "background 80ms cubic-bezier(0.23,1,0.32,1), color 80ms cubic-bezier(0.23,1,0.32,1)",
+                  }}
+                  onMouseEnter={e => { if (activeRepo?.full_name !== r.full_name) { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "var(--text-0)"; } }}
+                  onMouseLeave={e => { if (activeRepo?.full_name !== r.full_name) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-1)"; } }}
+                >
+                  <GitBranch size={11} weight="regular" style={{ flexShrink: 0, color: "var(--text-2)" }} />
+                  <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--font-geist-mono)" }}>
+                    {r.full_name}
+                  </span>
+                  <StatusBadge status={r.status} />
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Diff viewer ───────────────────────────────────────────────────────────────
 function DiffViewer({ diff }: { diff: DiffResult }) {
+  const rm = useReducedMotion();
+
   const renderLines = (code: string, sign: "+" | "-") =>
     code.split("\n").map((line, i) => (
-      <div
+      <motion.div
         key={i}
-        className={`px-4 py-0.5 font-mono text-[11px] leading-relaxed flex gap-3
-                    ${sign === "-" ? "bg-red-500/8 text-red-300/80" : "bg-emerald-500/8 text-emerald-300/80"}`}
+        initial={rm ? {} : { opacity: 0, y: 6 }}
+        animate={rm ? {} : { opacity: 1, y: 0 }}
+        transition={rm ? { duration: 0 } : { duration: 0.12, delay: i * 0.015, ease: EASE_OUT }}
+        style={{
+          display: "flex", gap: 12, padding: "2px 14px", fontSize: 11, lineHeight: 1.6,
+          fontFamily: "var(--font-geist-mono)",
+          background: sign === "-" ? "rgba(244,63,94,0.06)" : "rgba(16,185,129,0.06)",
+        }}
       >
-        <span className={`select-none w-3 shrink-0 ${sign === "-" ? "text-red-500/50" : "text-emerald-500/50"}`}>{sign}</span>
-        <span className="break-all">{line || " "}</span>
-      </div>
+        <span style={{ color: sign === "-" ? "rgba(244,63,94,0.45)" : "rgba(16,185,129,0.45)", userSelect: "none", width: 8, flexShrink: 0 }}>
+          {sign}
+        </span>
+        <span style={{ color: sign === "-" ? "rgba(244,63,94,0.85)" : "rgba(16,185,129,0.85)", wordBreak: "break-all" }}>
+          {line || " "}
+        </span>
+      </motion.div>
     ));
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-xs text-neutral-400 leading-relaxed bg-white/3 border border-white/6 rounded-lg p-3">
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <p style={{ fontSize: 12, color: "var(--text-1)", lineHeight: 1.65, padding: "10px 12px", background: "var(--bg-2)", borderRadius: "var(--r2)", border: "1px solid var(--border-0)" }}>
         {diff.explanation}
       </p>
-      <div className="grid grid-cols-2 rounded-xl overflow-hidden border border-white/8">
+      <div className="bezel" style={{ overflow: "hidden", display: "grid", gridTemplateColumns: "1fr 1fr" }}>
         <div>
-          <div className="px-4 py-2 text-[11px] font-medium text-red-400 bg-red-500/5 border-b border-white/6 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-red-500/60" /> Before
+          <div style={{ padding: "6px 14px", fontSize: 10, fontWeight: 600, fontFamily: "var(--font-geist-mono)", color: "var(--deletion)", background: "rgba(244,63,94,0.05)", borderBottom: "1px solid var(--border-0)" }}>
+            BEFORE
           </div>
-          <div className="overflow-auto max-h-80">{renderLines(diff.before, "-")}</div>
+          <div style={{ overflowY: "auto", maxHeight: 320 }}>{renderLines(diff.before, "-")}</div>
         </div>
-        <div className="border-l border-white/8">
-          <div className="px-4 py-2 text-[11px] font-medium text-emerald-400 bg-emerald-500/5 border-b border-white/6 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500/60" /> After
+        <div style={{ borderLeft: "1px solid var(--border-0)" }}>
+          <div style={{ padding: "6px 14px", fontSize: 10, fontWeight: 600, fontFamily: "var(--font-geist-mono)", color: "var(--addition)", background: "rgba(16,185,129,0.05)", borderBottom: "1px solid var(--border-0)" }}>
+            AFTER
           </div>
-          <div className="overflow-auto max-h-80">{renderLines(diff.after, "+")}</div>
+          <div style={{ overflowY: "auto", maxHeight: 320 }}>{renderLines(diff.after, "+")}</div>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Chat Panel ───────────────────────────────────────────────────────────────
-
+// ── Chat panel ────────────────────────────────────────────────────────────────
 function ChatPanel({
   messages, loading, input, onInputChange, onSend, onGenerateTests, onRefactor, activeFile,
 }: {
-  messages: ChatMessage[];
-  loading: boolean;
-  input: string;
-  onInputChange: (v: string) => void;
-  onSend: () => void;
-  onGenerateTests: () => void;
-  onRefactor: () => void;
+  messages: ChatMessage[]; loading: boolean; input: string;
+  onInputChange: (v: string) => void; onSend: () => void;
+  onGenerateTests: () => void; onRefactor: () => void;
   activeFile: FileNode | null;
 }) {
   const bottomRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const rm = useReducedMotion();
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      onSend();
-    }
-  };
+    bottomRef.current?.scrollIntoView({ behavior: rm ? "auto" : "smooth" });
+  }, [messages, rm]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/6 shrink-0">
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 6,
+        padding: "8px 14px", borderBottom: "1px solid var(--border-0)", flexShrink: 0,
+      }}>
+        <button
+          className="btn-ghost"
           onClick={onGenerateTests}
           disabled={!activeFile || loading}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium
-                     border border-white/8 text-neutral-400 hover:text-white hover:bg-white/5
-                     hover:border-white/12 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
         >
-          <FlaskConical className="w-3 h-3" />
-          Generate tests
-        </motion.button>
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.97 }}
+          <Flask size={12} weight="regular" /> Generate tests
+        </button>
+        <button
+          className="btn-ghost"
           onClick={onRefactor}
           disabled={!activeFile || loading}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium
-                     border border-white/8 text-neutral-400 hover:text-white hover:bg-white/5
-                     hover:border-white/12 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
         >
-          <RefreshCw className="w-3 h-3" />
-          Refactor diff
-        </motion.button>
+          <ArrowsClockwise size={12} weight="regular" /> Refactor diff
+        </button>
         {activeFile && (
-          <span className="ml-auto text-[10px] text-neutral-600 truncate max-w-[150px] flex items-center gap-1">
-            <File className="w-2.5 h-2.5 shrink-0" />
+          <span style={{
+            marginLeft: "auto", fontSize: 10, color: "var(--text-2)",
+            fontFamily: "var(--font-geist-mono)", overflow: "hidden",
+            textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 160,
+          }}>
             {activeFile.path}
           </span>
         )}
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div style={{ flex: 1, overflowY: "auto", padding: "14px", display: "flex", flexDirection: "column", gap: 12 }}>
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center py-20 gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
-              <Zap className="w-5 h-5 text-purple-400" />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 12, textAlign: "center", padding: "40px 20px" }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: "var(--r3)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: "var(--accent-dim)", border: "1px solid var(--accent-border)",
+            }}>
+              <Lightning size={16} weight="regular" style={{ color: "var(--accent)" }} />
             </div>
             <div>
-              <p className="text-sm font-medium text-neutral-300 mb-1">Ask Nexus anything</p>
-              <p className="text-xs text-neutral-600 max-w-[220px]">
-                Select a file for targeted context, or ask about the whole repo.
+              <p style={{ fontSize: 13, fontWeight: 600, color: "var(--text-0)", marginBottom: 5 }}>Ask about your codebase</p>
+              <p style={{ fontSize: 11, color: "var(--text-2)", lineHeight: 1.6, maxWidth: 200 }}>
+                Select a file for targeted context, or ask broadly.
               </p>
             </div>
           </div>
@@ -325,23 +398,34 @@ function ChatPanel({
           {messages.map((msg) => (
             <motion.div
               key={msg.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+              initial={rm ? {} : { opacity: 0, y: 8 }}
+              animate={rm ? {} : { opacity: 1, y: 0 }}
+              transition={rm ? { duration: 0 } : { duration: 0.22, ease: EASE_OUT }}
+              style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}
             >
               {msg.role === "assistant" && (
-                <div className="w-6 h-6 rounded-lg bg-purple-500/15 border border-purple-500/25 flex items-center justify-center mr-2 mt-1 shrink-0">
-                  <Zap className="w-3 h-3 text-purple-400" />
+                <div style={{
+                  width: 22, height: 22, borderRadius: "var(--r2)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  background: "var(--accent-dim)", border: "1px solid var(--accent-border)",
+                  marginRight: 8, marginTop: 2, flexShrink: 0,
+                }}>
+                  <Lightning size={11} weight="regular" style={{ color: "var(--accent)" }} />
                 </div>
               )}
               <div
-                className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed
-                            ${msg.role === "user"
-                              ? "bg-purple-600/20 text-purple-100 border border-purple-500/20 rounded-tr-md"
-                              : "bg-white/5 text-neutral-200 border border-white/6 rounded-tl-md"}`}
+                className={msg.role === "user" ? "" : "bezel-inner"}
+                style={{
+                  maxWidth: "82%",
+                  padding: "9px 13px",
+                  borderRadius: msg.role === "user" ? "var(--r3)" : "var(--r2)",
+                  fontSize: 12, lineHeight: 1.65,
+                  ...(msg.role === "user"
+                    ? { background: "var(--accent-dim)", border: "1px solid var(--accent-border)", color: "var(--accent-text)" }
+                    : { color: "var(--text-1)" }),
+                }}
               >
-                <pre className="whitespace-pre-wrap font-sans break-words text-[13px] leading-relaxed">
+                <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", wordBreak: "break-word", margin: 0 }}>
                   {msg.content}
                 </pre>
               </div>
@@ -350,426 +434,353 @@ function ChatPanel({
         </AnimatePresence>
 
         {loading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-start gap-2"
-          >
-            <div className="w-6 h-6 rounded-lg bg-purple-500/15 border border-purple-500/25 flex items-center justify-center shrink-0">
-              <Zap className="w-3 h-3 text-purple-400" />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{
+              width: 22, height: 22, borderRadius: "var(--r2)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: "var(--accent-dim)", border: "1px solid var(--accent-border)", flexShrink: 0,
+            }}>
+              <Lightning size={11} weight="regular" style={{ color: "var(--accent)" }} />
             </div>
-            <div className="bg-white/5 border border-white/6 rounded-2xl rounded-tl-md px-4 py-3 flex gap-1 items-center">
-              <span className="w-1.5 h-1.5 rounded-full bg-neutral-500 typing-dot" />
-              <span className="w-1.5 h-1.5 rounded-full bg-neutral-500 typing-dot" />
-              <span className="w-1.5 h-1.5 rounded-full bg-neutral-500 typing-dot" />
+            <div className="bezel-inner" style={{ padding: "10px 14px", display: "flex", gap: 5, alignItems: "center" }}>
+              <span className="typing-dot" />
+              <span className="typing-dot" />
+              <span className="typing-dot" />
             </div>
-          </motion.div>
+          </div>
         )}
         <div ref={bottomRef} />
       </div>
 
       {/* Input */}
-      <div className="px-4 py-3 border-t border-white/6 shrink-0">
+      <div style={{ padding: "10px 14px", borderTop: "1px solid var(--border-0)", flexShrink: 0 }}>
         <div
-          className="flex items-end gap-2 bg-white/4 border border-white/8 rounded-xl px-3 py-2
-                     focus-within:border-purple-500/40 focus-within:bg-white/6 transition-all"
+          className="bezel-inner"
+          style={{
+            display: "flex", alignItems: "flex-end", gap: 8,
+            padding: "8px 10px",
+            transition: "border-color 120ms cubic-bezier(0.23,1,0.32,1)",
+          }}
         >
           <textarea
-            ref={textareaRef}
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
-            onKeyDown={handleKey}
-            placeholder="Ask about the codebase…"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
+            }}
+            placeholder="Ask about the codebase"
             rows={1}
-            className="flex-1 resize-none bg-transparent text-sm text-white placeholder-neutral-600
-                       focus:outline-none max-h-32 overflow-y-auto py-0.5 leading-relaxed"
+            style={{
+              flex: 1, resize: "none", background: "transparent",
+              color: "var(--text-0)", fontSize: 12, lineHeight: 1.6,
+              border: "none", outline: "none",
+              maxHeight: 112, overflowY: "auto",
+              fontFamily: "var(--font-geist-sans)",
+            }}
           />
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+          <button
             onClick={onSend}
             disabled={!input.trim() || loading}
-            className="shrink-0 w-7 h-7 rounded-lg bg-purple-600 hover:bg-purple-500 flex items-center justify-center
-                       text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            className="btn-accent"
+            style={{ flexShrink: 0, padding: "5px 10px", borderRadius: "var(--r1)" }}
           >
-            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-          </motion.button>
+            {loading
+              ? <CircleNotch size={12} weight="regular" className="animate-spin" />
+              : <PaperPlaneRight size={12} weight="regular" />}
+          </button>
         </div>
-        <p className="text-[10px] text-neutral-700 mt-1.5 px-1">Enter to send · Shift+Enter for newline</p>
+        <p style={{ fontSize: 10, color: "var(--text-2)", marginTop: 5, paddingLeft: 2 }}>
+          Enter to send, Shift+Enter for newline
+        </p>
       </div>
     </div>
   );
 }
 
-// ─── 3D Graph Panel ───────────────────────────────────────────────────────────
-
+// ── 3D Graph panel ────────────────────────────────────────────────────────────
 function GraphPanel({
   data, onNodeClick, highlightedNodes,
 }: {
-  data: GraphData;
-  onNodeClick: (node: GraphNode) => void;
+  data: GraphData; onNodeClick: (n: GraphNode) => void;
   highlightedNodes: Set<string>;
 }) {
   const fgRef = useRef<any>(null);
-  const [hoverNode, setHoverNode] = useState<any | null>(null);
+  const [hoverNode, setHoverNode] = useState<any>(null);
 
   const neighbors = useMemo(() => {
     const map = new Map<string, Set<string>>();
-    data.links.forEach((linkObj) => {
-      const l = linkObj as any;
+    data.links.forEach((l: any) => {
       const s = typeof l.source === "object" ? l.source.id : l.source;
       const t = typeof l.target === "object" ? l.target.id : l.target;
       if (!map.has(s)) map.set(s, new Set());
       if (!map.has(t)) map.set(t, new Set());
-      map.get(s)!.add(t);
-      map.get(t)!.add(s);
+      map.get(s)!.add(t); map.get(t)!.add(s);
     });
     return map;
   }, [data]);
 
-  const nodeColor = useCallback(
-    (node: any) => {
-      if (hoverNode) {
-        if (node.id === hoverNode.id) return "#ffffff";
-        if (neighbors.get(hoverNode.id)?.has(node.id)) return LANG_COLORS[node.language] ?? "#888";
-        return "#1a1a2e";
-      }
-      if (highlightedNodes.size === 0) return LANG_COLORS[node.language] ?? "#888";
-      return highlightedNodes.has(node.id) ? "#f59e0b" : "#1a1a2e";
-    },
-    [highlightedNodes, hoverNode, neighbors]
-  );
+  const nodeColor = useCallback((node: any) => {
+    if (hoverNode) {
+      if (node.id === hoverNode.id) return "#ffffff";
+      if (neighbors.get(hoverNode.id)?.has(node.id)) return LANG_COLORS[node.language] ?? "#888";
+      return "#161620";
+    }
+    if (highlightedNodes.size === 0) return LANG_COLORS[node.language] ?? "#888";
+    return highlightedNodes.has(node.id) ? "#3b82f6" : "#161620";
+  }, [highlightedNodes, hoverNode, neighbors]);
 
-  const linkColor = useCallback(
-    (link: any) => {
-      const srcId = typeof link.source === "object" ? link.source.id : link.source;
-      const tgtId = typeof link.target === "object" ? link.target.id : link.target;
-      if (hoverNode && (srcId === hoverNode.id || tgtId === hoverNode.id)) return "rgba(255,255,255,0.35)";
-      if (hoverNode) return "rgba(255,255,255,0.02)";
-      if (highlightedNodes.has(srcId) || highlightedNodes.has(tgtId)) return "rgba(245,158,11,0.7)";
-      return "rgba(255,255,255,0.05)";
-    },
-    [highlightedNodes, hoverNode]
-  );
+  const linkColor = useCallback((link: any) => {
+    const s = typeof link.source === "object" ? link.source.id : link.source;
+    const t = typeof link.target === "object" ? link.target.id : link.target;
+    if (hoverNode && (s === hoverNode.id || t === hoverNode.id)) return "rgba(255,255,255,0.3)";
+    if (hoverNode) return "rgba(255,255,255,0.015)";
+    if (highlightedNodes.has(s) || highlightedNodes.has(t)) return "rgba(59,130,246,0.7)";
+    return "rgba(255,255,255,0.04)";
+  }, [highlightedNodes, hoverNode]);
 
-  const handleNodeClick = useCallback(
-    (node: any) => {
-      if (fgRef.current) {
-        const distance = 100;
-        const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
-        fgRef.current.cameraPosition(
-          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
-          node,
-          1800
-        );
-      }
-      onNodeClick(node);
-    },
-    [onNodeClick]
-  );
+  const handleClick = useCallback((node: any) => {
+    if (fgRef.current) {
+      const d = 100;
+      const r = 1 + d / Math.hypot(node.x, node.y, node.z);
+      fgRef.current.cameraPosition(
+        { x: node.x * r, y: node.y * r, z: node.z * r }, node, 220,
+      );
+    }
+    onNodeClick(node);
+  }, [onNodeClick]);
 
   return (
-    <div className="relative w-full h-full rounded-xl overflow-hidden bg-[#04040c]">
+    <div style={{ position: "relative", width: "100%", height: "100%", background: "#06060c", borderRadius: "var(--r3)", overflow: "hidden" }}>
       {/* Language legend */}
-      <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 bg-black/40 backdrop-blur-sm rounded-lg p-2 border border-white/6">
+      <div style={{
+        position: "absolute", top: 10, left: 10, zIndex: 10,
+        display: "flex", flexDirection: "column", gap: 5,
+        padding: "8px 10px", borderRadius: "var(--r2)",
+        background: "rgba(0,0,0,0.5)", border: "1px solid var(--border-0)",
+        backdropFilter: "blur(8px)",
+      }}>
         {Object.entries(LANG_COLORS).map(([lang, color]) => (
-          <div key={lang} className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-            <span className="text-[9px] text-neutral-500 font-medium">{lang}</span>
+          <div key={lang} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0 }} />
+            <span data-mono style={{ fontSize: 9, color: "var(--text-2)" }}>{lang}</span>
           </div>
         ))}
       </div>
 
       {/* Impact badge */}
       {highlightedNodes.size > 0 && (
-        <div className="absolute top-3 right-3 z-10 px-2.5 py-1.5 rounded-full
-                        bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-300 flex items-center gap-1.5">
-          <Zap className="w-3 h-3" />
-          Impact: {highlightedNodes.size} nodes
+        <div style={{
+          position: "absolute", top: 10, right: 10, zIndex: 10,
+          display: "flex", alignItems: "center", gap: 5,
+          padding: "5px 10px", borderRadius: "var(--r1)",
+          background: "var(--accent-dim)", border: "1px solid var(--accent-border)",
+          fontSize: 10, fontWeight: 500, color: "var(--accent-text)",
+          fontFamily: "var(--font-geist-mono)",
+        }}>
+          <Lightning size={10} weight="regular" />
+          {highlightedNodes.size} nodes impacted
         </div>
       )}
 
       <ForceGraph3D
         ref={fgRef}
         graphData={data}
-        nodeLabel={(n: any) => `${n.name} · ${n.node_type}`}
+        nodeLabel={(n: any) => `${n.name} (${n.node_type})`}
         nodeColor={nodeColor}
         nodeVal={(n: any) => Math.sqrt(n.val ?? 1)}
         nodeOpacity={0.92}
         linkColor={linkColor}
         linkWidth={(l: any) => {
-          const srcId = typeof l.source === "object" ? l.source.id : l.source;
-          const tgtId = typeof l.target === "object" ? l.target.id : l.target;
-          if (hoverNode && (srcId === hoverNode.id || tgtId === hoverNode.id)) return 1.2;
-          return highlightedNodes.has(srcId) ? 2 : 0.3;
+          const s = typeof l.source === "object" ? l.source.id : l.source;
+          const t = typeof l.target === "object" ? l.target.id : l.target;
+          if (hoverNode && (s === hoverNode.id || t === hoverNode.id)) return 1.2;
+          return highlightedNodes.has(s) ? 2 : 0.25;
         }}
         linkDirectionalParticles={2}
-        linkDirectionalParticleWidth={1.5}
-        linkDirectionalParticleSpeed={(l: any) => l.type === "import" ? 0.004 : 0.009}
+        linkDirectionalParticleWidth={1.2}
+        linkDirectionalParticleSpeed={(l: any) => l.type === "import" ? 0.004 : 0.008}
         linkDirectionalArrowLength={3}
         linkDirectionalArrowRelPos={1}
-        onNodeClick={handleNodeClick}
+        onNodeClick={handleClick}
         onNodeHover={setHoverNode}
-        backgroundColor="#04040c"
+        backgroundColor="#06060c"
         showNavInfo={false}
       />
     </div>
   );
 }
 
-// ─── Repo Dropdown ────────────────────────────────────────────────────────────
-
-function RepoSelect({
-  repos, activeRepo, onSelect, isImporting,
+// ── Tab bar ───────────────────────────────────────────────────────────────────
+function TabBar({
+  tabs, active, onChange,
 }: {
-  repos: MergedRepo[];
-  activeRepo: MergedRepo | null;
-  onSelect: (r: MergedRepo) => void;
-  isImporting: boolean;
+  tabs: { key: string; label: string; icon: React.ReactNode; dot?: boolean }[];
+  active: string;
+  onChange: (k: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const label = activeRepo
-    ? activeRepo.full_name.split("/")[1]
-    : "Select repository…";
-
   return (
-    <div className="relative w-full" ref={ref}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-white/4 hover:bg-white/6
-                   border border-white/8 hover:border-white/14 rounded-xl text-xs
-                   text-neutral-300 transition-all"
-      >
-        <GitBranch className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
-        <span className="flex-1 text-left truncate">{label}</span>
-        {isImporting ? (
-          <Loader2 className="w-3 h-3 text-purple-400 animate-spin shrink-0" />
-        ) : (
-          <ChevronDown className={`w-3 h-3 text-neutral-600 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
-        )}
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -6, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -6, scale: 0.97 }}
-            transition={{ duration: 0.14, ease: "easeOut" }}
-            className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#111120] border border-white/10
-                       rounded-xl shadow-2xl overflow-hidden"
-          >
-            <div className="max-h-64 overflow-y-auto py-1">
-              {repos.length === 0 ? (
-                <div className="flex items-center justify-center py-6 gap-2 text-xs text-neutral-600">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading repositories…
-                </div>
-              ) : (
-                repos.map((r) => (
-                  <button
-                    key={r.full_name}
-                    onClick={() => { onSelect(r); setOpen(false); }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs
-                                text-left hover:bg-white/5 transition-colors
-                                ${activeRepo?.full_name === r.full_name ? "bg-purple-500/10 text-purple-200" : "text-neutral-300"}`}
-                  >
-                    <GitBranch className="w-3 h-3 text-neutral-600 shrink-0" />
-                    <span className="flex-1 truncate">{r.full_name}</span>
-                    <StatusBadge status={r.status} />
-                  </button>
-                ))
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <div style={{
+      display: "flex", alignItems: "center", height: 40,
+      paddingInline: 12, gap: 2, flexShrink: 0,
+      borderBottom: "1px solid var(--border-0)",
+      background: "var(--bg-1)",
+    }}>
+      {tabs.map(tab => (
+        <button
+          key={tab.key}
+          onClick={() => onChange(tab.key)}
+          style={{
+            display: "flex", alignItems: "center", gap: 5, height: "100%",
+            padding: "0 10px", fontSize: 11, fontWeight: 500,
+            border: "none", background: "transparent", cursor: "pointer",
+            borderBottom: `2px solid ${active === tab.key ? "var(--accent)" : "transparent"}`,
+            color: active === tab.key ? "var(--text-0)" : "var(--text-2)",
+            transition: "color 120ms cubic-bezier(0.23,1,0.32,1), border-color 120ms cubic-bezier(0.23,1,0.32,1)",
+          }}
+        >
+          {tab.icon}
+          {tab.label}
+          {tab.dot && (
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#f59e0b", flexShrink: 0 }} />
+          )}
+        </button>
+      ))}
     </div>
   );
 }
 
-// ─── Dashboard Root ───────────────────────────────────────────────────────────
-
+// ── Dashboard root ────────────────────────────────────────────────────────────
 export default function DashboardPage() {
+  const rm = useReducedMotion();
 
+  // Token capture
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get("token");
-    if (token) {
-      localStorage.setItem("nexus_token", token);
+    const p = new URLSearchParams(window.location.search);
+    const t = p.get("token");
+    if (t) {
+      localStorage.setItem("nexus_token", t);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
 
   const getHeaders = () => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("nexus_token") : null;
+    const t = typeof window !== "undefined" ? localStorage.getItem("nexus_token") : null;
     return {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: "Bearer " + token } : {}),
+      ...(t ? { Authorization: "Bearer " + t } : {}),
     };
   };
 
-  const [repos, setRepos]           = useState<MergedRepo[]>([]);
-  const [activeRepo, setActiveRepo] = useState<MergedRepo | null>(null);
-  const [fileTree, setFileTree]     = useState<FileNode[]>([]);
-  const [activeFile, setActiveFile] = useState<FileNode | null>(null);
-  const [fileSearch, setFileSearch] = useState("");
-  const [graphData, setGraphData]   = useState<GraphData>({ nodes: [], links: [] });
-  const [highlightedNodes, setHighlightedNodes] = useState<Set<string>>(new Set());
-  const [messages, setMessages]     = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput]   = useState("");
+  const [repos, setRepos]             = useState<MergedRepo[]>([]);
+  const [activeRepo, setActiveRepo]   = useState<MergedRepo | null>(null);
+  const [fileTree, setFileTree]       = useState<FileNode[]>([]);
+  const [activeFile, setActiveFile]   = useState<FileNode | null>(null);
+  const [fileSearch, setFileSearch]   = useState("");
+  const [graphData, setGraphData]     = useState<GraphData>({ nodes: [], links: [] });
+  const [highlighted, setHighlighted] = useState<Set<string>>(new Set());
+  const [messages, setMessages]       = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput]     = useState("");
   const [chatLoading, setChatLoading] = useState(false);
-  const [diff, setDiff]             = useState<DiffResult | null>(null);
-  const [activeTab, setActiveTab]   = useState<"chat" | "diff">("chat");
-  const [sidePanel, setSidePanel]   = useState<"graph" | "info">("graph");
+  const [diff, setDiff]               = useState<DiffResult | null>(null);
+  const [centreTab, setCentreTab]     = useState<"chat" | "diff">("chat");
+  const [rightTab, setRightTab]       = useState<"graph" | "info">("graph");
   const [isImporting, setIsImporting] = useState(false);
-  const [hasAutoExplained, setHasAutoExplained] = useState<Set<string>>(new Set());
-  const [showSettings, setShowSettings] = useState(false);
-  const [groqKey, setGroqKey]       = useState("");
+  const [autoExplained, setAutoExplained] = useState<Set<string>>(new Set());
+  const [showSettings, setShowSettings]   = useState(false);
+  const [groqKey, setGroqKey]         = useState("");
   const abortRef = useRef<AbortController | null>(null);
 
-  // ── Load & Poll repos ───────────────────────────────────────────────────────
+  // ── Fetch repos ─────────────────────────────────────────────────────────────
   const fetchRepos = useCallback(async () => {
     try {
       const [dbRes, ghRes] = await Promise.all([
         fetch(`${API}/api/repos`, { credentials: "include", headers: getHeaders() }),
         fetch(`${API}/api/github/repos`, { credentials: "include", headers: getHeaders() }),
       ]);
-      const dbRepos: Repository[] = dbRes.ok ? await dbRes.json() : [];
-      const ghRepos: GithubRepo[] = ghRes.ok ? await ghRes.json() : [];
+      const db: Repository[] = dbRes.ok ? await dbRes.json() : [];
+      const gh: GithubRepo[] = ghRes.ok ? await ghRes.json() : [];
 
-      const mergedMap = new Map<string, MergedRepo>();
-      for (const gh of ghRepos) {
-        mergedMap.set(gh.full_name, { full_name: gh.full_name, status: "unimported" });
-      }
-      for (const db of dbRepos) {
-        mergedMap.set(db.full_name, {
-          full_name: db.full_name,
-          id: db.id,
-          status: db.status,
-          chunk_count: db.chunk_count,
-          file_count: db.file_count,
-        });
-      }
+      const map = new Map<string, MergedRepo>();
+      for (const r of gh) map.set(r.full_name, { full_name: r.full_name, status: "unimported" });
+      for (const r of db) map.set(r.full_name, {
+        full_name: r.full_name, id: r.id, status: r.status,
+        chunk_count: r.chunk_count, file_count: r.file_count,
+      });
 
-      const merged = Array.from(mergedMap.values());
+      const merged = Array.from(map.values());
       setRepos(merged);
       return merged;
-    } catch (err) {
-      console.error("Failed to load repos:", err);
+    } catch (e) {
+      console.error("fetchRepos:", e);
       return undefined;
     }
   }, []);
 
   useEffect(() => {
-    fetchRepos().then((data) => {
+    fetchRepos().then(data => {
       if (data) {
-        const ready = data.find((r) => r.status === "ready");
+        const ready = data.find(r => r.status === "ready");
         if (ready && !activeRepo) setActiveRepo(ready);
       }
     });
-    const interval = setInterval(fetchRepos, 3000);
-    return () => clearInterval(interval);
+    const iv = setInterval(fetchRepos, 4000);
+    return () => clearInterval(iv);
   }, [fetchRepos, activeRepo]);
 
   // ── Import repo ─────────────────────────────────────────────────────────────
-  const handleImportRepo = useCallback(async (full_name: string) => {
+  const importRepo = useCallback(async (full_name: string) => {
     if (isImporting) return;
     setIsImporting(true);
     try {
-      const resp = await fetch(`${API}/api/repos`, {
-        method: "POST",
-        headers: getHeaders(),
-        credentials: "include",
+      const r = await fetch(`${API}/api/repos`, {
+        method: "POST", credentials: "include", headers: getHeaders(),
         body: JSON.stringify({ full_name }),
       });
-      if (resp.ok) {
-        await fetchRepos();
-      } else {
-        const errData = await resp.json().catch(() => ({}));
-        alert(`Error importing: ${errData.detail || resp.statusText}`);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Error importing repository.");
-    } finally {
-      setIsImporting(false);
-    }
+      if (r.ok) { await fetchRepos(); }
+      else { const d = await r.json().catch(() => ({})); alert(`Import failed: ${d.detail || r.statusText}`); }
+    } catch (e) { console.error(e); alert("Import failed."); }
+    finally { setIsImporting(false); }
   }, [fetchRepos, isImporting]);
 
-  // ── Handle repo selection ────────────────────────────────────────────────────
   const handleRepoSelect = useCallback(async (r: MergedRepo) => {
     setActiveRepo(r);
-    if (r.status === "unimported") {
-      await handleImportRepo(r.full_name);
-    }
-  }, [handleImportRepo]);
+    if (r.status === "unimported") await importRepo(r.full_name);
+  }, [importRepo]);
 
-  // ── Save Settings ────────────────────────────────────────────────────────────
-  const handleSaveSettings = useCallback(async () => {
-    try {
-      const res = await fetch(`${API}/api/user/key`, {
-        method: "POST",
-        headers: getHeaders(),
-        credentials: "include",
-        body: JSON.stringify({ groq_api_key: groqKey }),
-      });
-      if (res.ok) {
-        setShowSettings(false);
-        setGroqKey("");
-        alert("Settings saved!");
-      } else {
-        alert("Failed to save settings.");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Error saving settings.");
-    }
-  }, [groqKey]);
-
-  // ── Load graph data ──────────────────────────────────────────────────────────
+  // ── Load graph ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!activeRepo?.id) return;
-    let subscribed = true;
-    fetch(`${API}/api/repos/${activeRepo.id}/graph`, {
-      credentials: "include",
-      headers: getHeaders(),
-    })
-      .then((r) => r.json())
-      .then((data: GraphData) => { if (subscribed) setGraphData(data); })
+    let live = true;
+    fetch(`${API}/api/repos/${activeRepo.id}/graph`, { credentials: "include", headers: getHeaders() })
+      .then(r => r.json())
+      .then((d: GraphData) => { if (live) setGraphData(d); })
       .catch(console.error);
-    return () => { subscribed = false; };
+    return () => { live = false; };
   }, [activeRepo]);
 
-  // ── Send chat message ────────────────────────────────────────────────────────
-  const handleSend = useCallback(async (overrideInput?: string) => {
-    const textToSend = typeof overrideInput === "string" ? overrideInput : chatInput;
-    if (!textToSend.trim() || !activeRepo || chatLoading) return;
+  // ── Settings ─────────────────────────────────────────────────────────────────
+  const saveSettings = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/api/user/key`, {
+        method: "POST", credentials: "include", headers: getHeaders(),
+        body: JSON.stringify({ groq_api_key: groqKey }),
+      });
+      if (r.ok) { setShowSettings(false); setGroqKey(""); alert("Saved."); }
+      else { alert("Failed to save."); }
+    } catch { alert("Error."); }
+  }, [groqKey]);
 
-    const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: textToSend,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    if (typeof overrideInput !== "string") setChatInput("");
+  // ── Chat ─────────────────────────────────────────────────────────────────────
+  const handleSend = useCallback(async (override?: string) => {
+    const text = typeof override === "string" ? override : chatInput;
+    if (!text.trim() || !activeRepo || chatLoading) return;
+
+    setMessages(p => [...p, { id: crypto.randomUUID(), role: "user", content: text, timestamp: new Date() }]);
+    if (typeof override !== "string") setChatInput("");
     setChatLoading(true);
 
-    const assistantId = crypto.randomUUID();
-    setMessages((prev) => [
-      ...prev,
-      { id: assistantId, role: "assistant", content: "", timestamp: new Date() },
-    ]);
+    const aid = crypto.randomUUID();
+    setMessages(p => [...p, { id: aid, role: "assistant", content: "", timestamp: new Date() }]);
 
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -777,201 +788,134 @@ export default function DashboardPage() {
 
     try {
       const resp = await fetch(`${API}/api/query/stream`, {
-        method: "POST",
-        headers: getHeaders(),
-        credentials: "include",
-        body: JSON.stringify({
-          question: textToSend,
-          repository_id: activeRepo.id || "",
-          provider: "groq",
-        }),
-        signal: ctrl.signal,
+        method: "POST", credentials: "include", headers: getHeaders(), signal: ctrl.signal,
+        body: JSON.stringify({ question: text, repository_id: activeRepo.id || "", provider: "groq" }),
       });
-
       const reader = resp.body!.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = "";
-
+      const dec = new TextDecoder();
+      let acc = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split("\n")) {
-          if (line.startsWith("data: ")) {
-            const token = line.slice(6);
-            if (token === "[DONE]") break;
-            accumulated += token;
-            setMessages((prev) =>
-              prev.map((m) => (m.id === assistantId ? { ...m, content: accumulated } : m))
-            );
-            const found = graphData.nodes.filter(
-              (n) => n.name.length > 3 && accumulated.includes(n.name)
-            );
-            if (found.length > 0) {
-              setHighlightedNodes((prev) => {
-                const next = new Set(prev);
-                let changed = false;
-                for (const f of found) {
-                  if (!next.has(f.id)) { next.add(f.id); changed = true; }
-                }
-                return changed ? next : prev;
-              });
-            }
-          }
+        for (const line of dec.decode(value, { stream: true }).split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          const tok = line.slice(6);
+          if (tok === "[DONE]") break;
+          acc += tok;
+          setMessages(p => p.map(m => m.id === aid ? { ...m, content: acc } : m));
+          const hit = graphData.nodes.filter(n => n.name.length > 3 && acc.includes(n.name));
+          if (hit.length) setHighlighted(p => { const n = new Set(p); let c = false; for (const h of hit) { if (!n.has(h.id)) { n.add(h.id); c = true; } } return c ? n : p; });
         }
       }
-    } catch (err: any) {
-      if (err.name !== "AbortError") {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId
-              ? { ...m, content: "⚠️ Error: Failed to get response. Please retry." }
-              : m
-          )
-        );
+    } catch (e: any) {
+      if (e.name !== "AbortError") {
+        setMessages(p => p.map(m => m.id === aid ? { ...m, content: "Error: could not get a response." } : m));
       }
-    } finally {
-      setChatLoading(false);
-    }
+    } finally { setChatLoading(false); }
   }, [chatInput, activeRepo, chatLoading, graphData.nodes]);
 
-  // ── Graph node click ─────────────────────────────────────────────────────────
-  const handleNodeClick = useCallback(
-    (node: GraphNode) => {
-      if (highlightedNodes.has(node.id)) {
-        setHighlightedNodes(new Set());
-      } else {
-        const connected = new Set<string>([node.id]);
-        for (const link of graphData.links) {
-          const src = typeof link.source === "object" ? (link.source as any).id : link.source;
-          const tgt = typeof link.target === "object" ? (link.target as any).id : link.target;
-          if (src === node.id) connected.add(tgt);
-          if (tgt === node.id) connected.add(src);
-        }
-        setHighlightedNodes(connected);
-      }
-      handleSend(`Explain the code in ${node.file_path} focusing on ${node.name}`);
-    },
-    [graphData.links, highlightedNodes, handleSend]
-  );
-
-  // ── File select ──────────────────────────────────────────────────────────────
-  const handleFileSelect = useCallback(
-    (file: FileNode) => {
-      setActiveFile(file);
-      if (file.type === "file") handleSend(`Explain the code in ${file.path}`);
-    },
-    [handleSend]
-  );
-
-  // ── Auto-explain ─────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (
-      activeRepo &&
-      activeRepo.status === "ready" &&
-      !hasAutoExplained.has(activeRepo.full_name)
-    ) {
-      setHasAutoExplained((prev) => new Set(prev).add(activeRepo.full_name));
-      setTimeout(() => {
-        handleSend("Explain the overall architecture and purpose of this repository.");
-      }, 500);
+  const handleNodeClick = useCallback((node: GraphNode) => {
+    if (highlighted.has(node.id)) { setHighlighted(new Set()); return; }
+    const connected = new Set<string>([node.id]);
+    for (const l of graphData.links) {
+      const s = typeof l.source === "object" ? (l.source as any).id : l.source;
+      const t = typeof l.target === "object" ? (l.target as any).id : l.target;
+      if (s === node.id) connected.add(t);
+      if (t === node.id) connected.add(s);
     }
-  }, [activeRepo, hasAutoExplained, handleSend]);
+    setHighlighted(connected);
+    handleSend(`Explain ${node.file_path}, focusing on ${node.name}`);
+  }, [graphData.links, highlighted, handleSend]);
 
-  // ── Generate tests ────────────────────────────────────────────────────────────
-  const handleGenerateTests = useCallback(async () => {
+  const handleFileSelect = useCallback((f: FileNode) => {
+    setActiveFile(f);
+    if (f.type === "file") handleSend(`Explain the code in ${f.path}`);
+  }, [handleSend]);
+
+  useEffect(() => {
+    if (activeRepo?.status === "ready" && !autoExplained.has(activeRepo.full_name)) {
+      setAutoExplained(p => new Set(p).add(activeRepo.full_name));
+      setTimeout(() => handleSend("Explain the overall architecture and purpose of this repository."), 500);
+    }
+  }, [activeRepo, autoExplained, handleSend]);
+
+  const handleGenerateTests = useCallback(() => {
     if (!activeFile || !activeRepo) return;
     handleSend(`Generate a complete unit test suite for ${activeFile.name}`);
   }, [activeFile, activeRepo, handleSend]);
 
-  // ── Refactor diff ─────────────────────────────────────────────────────────────
   const handleRefactor = useCallback(async () => {
     if (!activeFile || !activeRepo) return;
-    const instruction = window.prompt(
-      "Describe the refactoring (e.g. 'Add error handling and type guards'):"
-    );
-    if (!instruction) return;
-
+    const instr = window.prompt("Describe the refactoring:");
+    if (!instr) return;
     setChatLoading(true);
     try {
       const resp = await fetch(`${API}/api/tools/refactor-diff`, {
-        method: "POST",
-        headers: getHeaders(),
-        credentials: "include",
-        body: JSON.stringify({
-          repository_id: activeRepo.id || "",
-          file_path: activeFile.path,
-          symbol_name: activeFile.name,
-          refactor_instruction: instruction,
-          provider: "groq",
-        }),
+        method: "POST", credentials: "include", headers: getHeaders(),
+        body: JSON.stringify({ repository_id: activeRepo.id || "", file_path: activeFile.path, symbol_name: activeFile.name, refactor_instruction: instr, provider: "groq" }),
       });
-
       const reader = resp.body!.getReader();
-      const decoder = new TextDecoder();
+      const dec = new TextDecoder();
       let raw = "";
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split("\n")) {
-          if (line.startsWith("data: ")) {
-            const t = line.slice(6);
-            if (t !== "[DONE]") raw += t;
-          }
+        for (const l of dec.decode(value, { stream: true }).split("\n")) {
+          if (l.startsWith("data: ") && l.slice(6) !== "[DONE]") raw += l.slice(6);
         }
       }
-
-      const parsed: DiffResult = JSON.parse(raw);
-      setDiff(parsed);
-      setActiveTab("diff");
-    } catch {
-      alert("Failed to generate refactor diff.");
-    } finally {
-      setChatLoading(false);
-    }
+      setDiff(JSON.parse(raw));
+      setCentreTab("diff");
+    } catch { alert("Failed to generate diff."); }
+    finally { setChatLoading(false); }
   }, [activeFile, activeRepo]);
 
-  // ── Filtered file tree ───────────────────────────────────────────────────────
   const filteredTree = useMemo(() => {
     if (!fileSearch) return fileTree;
     const q = fileSearch.toLowerCase();
-    const filter = (nodes: FileNode[]): FileNode[] =>
-      nodes.flatMap((n) => {
+    const filter = (ns: FileNode[]): FileNode[] =>
+      ns.flatMap(n => {
         if (n.type === "file" && n.name.toLowerCase().includes(q)) return [n];
         if (n.type === "directory" && n.children) {
-          const filtered = filter(n.children);
-          return filtered.length ? [{ ...n, children: filtered }] : [];
+          const f = filter(n.children);
+          return f.length ? [{ ...n, children: f }] : [];
         }
         return [];
       });
     return filter(fileTree);
   }, [fileTree, fileSearch]);
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
-
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-screen w-screen overflow-hidden" style={{ background: "var(--bg-base)", color: "var(--text-primary)" }}>
+    <div style={{
+      display: "flex", height: "100vh", width: "100vw", overflow: "hidden",
+      background: "var(--bg-0)", color: "var(--text-0)",
+    }}>
 
-      {/* ── Left sidebar ── */}
+      {/* ── Sidebar ── */}
       <aside
-        className="w-[220px] flex-shrink-0 flex flex-col"
-        style={{ background: "var(--bg-surface)", borderRight: "1px solid var(--border)" }}
+        className="bezel"
+        style={{
+          width: 216, flexShrink: 0, display: "flex", flexDirection: "column",
+          borderRadius: 0, borderTop: "none", borderBottom: "none", borderLeft: "none",
+          borderRight: "1px solid var(--border-0)",
+          background: "var(--bg-1)",
+        }}
       >
-        {/* Logo & repo selector */}
-        <div className="px-3 py-3 flex flex-col gap-3" style={{ borderBottom: "1px solid var(--border)" }}>
-          {/* Logo */}
-          <div className="flex items-center gap-2 px-1">
-            <div className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                 style={{ background: "var(--purple-mid)", border: "1px solid rgba(139,92,246,0.35)" }}>
-              <Zap className="w-3.5 h-3.5 text-purple-300" />
+        {/* Brand + repo */}
+        <div style={{ padding: "12px 10px 10px", borderBottom: "1px solid var(--border-0)", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 2px" }}>
+            <div style={{
+              width: 24, height: 24, borderRadius: "var(--r2)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: "var(--accent-dim)", border: "1px solid var(--accent-border)",
+              flexShrink: 0,
+            }}>
+              <Lightning size={13} weight="regular" style={{ color: "var(--accent)" }} />
             </div>
-            <span className="text-[13px] font-semibold tracking-tight" style={{ color: "var(--text-primary)" }}>
-              Nexus
-            </span>
+            <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: "-0.3px" }}>Nexus</span>
           </div>
 
-          {/* Repo selector */}
           <RepoSelect
             repos={repos}
             activeRepo={activeRepo}
@@ -979,17 +923,17 @@ export default function DashboardPage() {
             isImporting={isImporting}
           />
 
-          {/* Repo meta */}
           {activeRepo && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              className="flex items-center gap-2 px-1"
+              initial={rm ? {} : { opacity: 0 }}
+              animate={rm ? {} : { opacity: 1 }}
+              transition={rm ? { duration: 0 } : { duration: 0.2, ease: EASE_OUT }}
+              style={{ display: "flex", alignItems: "center", gap: 7, paddingLeft: 2 }}
             >
               <StatusBadge status={activeRepo.status} />
-              {(activeRepo.status === "ready" || activeRepo.status === "READY") && (
-                <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-                  {(activeRepo.chunk_count || 0).toLocaleString()} chunks · {activeRepo.file_count || 0} files
+              {(activeRepo.status === "ready") && (
+                <span data-mono style={{ fontSize: 10, color: "var(--text-2)" }}>
+                  {(activeRepo.chunk_count || 0).toLocaleString()} chunks
                 </span>
               )}
             </motion.div>
@@ -997,245 +941,211 @@ export default function DashboardPage() {
         </div>
 
         {/* File search */}
-        <div className="px-3 py-2" style={{ borderBottom: "1px solid var(--border)" }}>
-          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg"
-               style={{ background: "var(--bg-hover)", border: "1px solid var(--border)" }}>
-            <Search className="w-3 h-3 shrink-0" style={{ color: "var(--text-muted)" }} />
+        <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--border-0)" }}>
+          <div
+            className="bezel-inner"
+            style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 9px" }}
+          >
+            <MagnifyingGlass size={12} weight="regular" style={{ color: "var(--text-2)", flexShrink: 0 }} />
             <input
               type="text"
-              placeholder="Search files…"
+              placeholder="Search files"
               value={fileSearch}
-              onChange={(e) => setFileSearch(e.target.value)}
-              className="flex-1 bg-transparent text-[11px] placeholder-neutral-700 focus:outline-none"
-              style={{ color: "var(--text-secondary)" }}
+              onChange={e => setFileSearch(e.target.value)}
+              style={{
+                flex: 1, background: "transparent", border: "none", outline: "none",
+                fontSize: 11, color: "var(--text-0)",
+                fontFamily: "var(--font-geist-sans)",
+              }}
             />
           </div>
         </div>
 
         {/* File tree */}
-        <div className="flex-1 overflow-y-auto py-1.5 px-2">
+        <div style={{ flex: 1, overflowY: "auto", padding: "6px 6px" }}>
           {filteredTree.length === 0 && (
-            <p className="text-[11px] px-2 py-5 text-center" style={{ color: "var(--text-muted)" }}>
+            <p style={{ fontSize: 11, color: "var(--text-2)", padding: "20px 10px", textAlign: "center" }}>
               {activeRepo ? "No files indexed yet." : "Select a repository."}
             </p>
           )}
-          {filteredTree.map((node) => (
+          {filteredTree.map(node => (
             <FileTreeNode
-              key={node.id}
-              node={node}
-              depth={0}
-              onSelect={handleFileSelect}
-              selected={activeFile?.id ?? null}
+              key={node.id} node={node} depth={0}
+              onSelect={handleFileSelect} selected={activeFile?.id ?? null}
             />
           ))}
         </div>
 
         {/* Settings */}
-        <div className="p-2" style={{ borderTop: "1px solid var(--border)" }}>
-          <motion.button
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.98 }}
+        <div style={{ padding: "6px", borderTop: "1px solid var(--border-0)" }}>
+          <button
+            className="sidebar-item"
             onClick={() => setShowSettings(true)}
-            className="sidebar-item w-full"
+            style={{ width: "100%" }}
           >
-            <Settings className="w-3.5 h-3.5 shrink-0" />
-            <span className="text-[11px]">Settings</span>
-          </motion.button>
+            <Gear size={13} weight="regular" />
+            <span style={{ fontSize: 11 }}>Settings</span>
+          </button>
         </div>
       </aside>
 
       {/* ── Centre: Chat / Diff ── */}
-      <div
-        className="flex-1 flex flex-col min-w-0"
-        style={{ borderRight: "1px solid var(--border)" }}
-      >
-        {/* Tab bar */}
-        <div
-          className="flex items-center px-4 h-11 shrink-0 gap-1"
-          style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-surface)" }}
-        >
-          {(["chat", "diff"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`relative flex items-center gap-1.5 px-3 h-full text-[11px] font-medium
-                          transition-colors border-b-2
-                          ${activeTab === tab
-                            ? "border-purple-500 text-white"
-                            : "border-transparent hover:text-neutral-300"}`}
-              style={{ color: activeTab === tab ? "var(--text-primary)" : "var(--text-muted)" }}
-            >
-              {tab === "chat" ? <><MessageSquare className="w-3 h-3" /> Chat</> : <><Code2 className="w-3 h-3" /> Diff viewer</>}
-              {tab === "diff" && diff && (
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              )}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex-1 min-h-0">
-          {activeTab === "chat" ? (
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, borderRight: "1px solid var(--border-0)" }}>
+        <TabBar
+          active={centreTab}
+          onChange={k => setCentreTab(k as "chat" | "diff")}
+          tabs={[
+            { key: "chat", label: "Chat", icon: <Lightning size={12} weight="regular" /> },
+            { key: "diff", label: "Diff viewer", icon: <Code size={12} weight="regular" />, dot: !!diff },
+          ]}
+        />
+        <div style={{ flex: 1, minHeight: 0 }}>
+          {centreTab === "chat" ? (
             <ChatPanel
-              messages={messages}
-              loading={chatLoading}
-              input={chatInput}
-              onInputChange={setChatInput}
-              onSend={handleSend}
-              onGenerateTests={handleGenerateTests}
-              onRefactor={handleRefactor}
+              messages={messages} loading={chatLoading}
+              input={chatInput} onInputChange={setChatInput} onSend={handleSend}
+              onGenerateTests={handleGenerateTests} onRefactor={handleRefactor}
               activeFile={activeFile}
             />
           ) : (
-            <div className="p-4 overflow-y-auto h-full">
-              {diff ? (
-                <DiffViewer diff={diff} />
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-                  <Code2 className="w-8 h-8" style={{ color: "var(--text-muted)" }} />
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    Select a file and click "Refactor diff" to generate a before/after diff.
-                  </p>
-                </div>
-              )}
+            <div style={{ padding: 14, overflowY: "auto", height: "100%" }}>
+              {diff
+                ? <DiffViewer diff={diff} />
+                : (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 10, textAlign: "center" }}>
+                    <Code size={28} weight="thin" style={{ color: "var(--text-2)" }} />
+                    <p style={{ fontSize: 12, color: "var(--text-2)" }}>No diff generated yet.</p>
+                  </div>
+                )}
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Right: 3D graph ── */}
-      <div className="w-[44%] flex-shrink-0 flex flex-col" style={{ background: "var(--bg-base)" }}>
-        {/* Graph header */}
-        <div
-          className="flex items-center gap-2 px-4 h-11 shrink-0"
-          style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-surface)" }}
-        >
+      {/* ── Right: graph (asymmetric, wider) ── */}
+      <div style={{ width: "46%", flexShrink: 0, display: "flex", flexDirection: "column" }}>
+        <div style={{
+          display: "flex", alignItems: "center", height: 40, paddingInline: 12, gap: 2,
+          borderBottom: "1px solid var(--border-0)", background: "var(--bg-1)", flexShrink: 0,
+        }}>
           <button
-            onClick={() => setSidePanel("graph")}
-            className={`flex items-center gap-1.5 px-3 h-full text-[11px] font-medium
-                        transition-colors border-b-2
-                        ${sidePanel === "graph" ? "border-blue-500 text-white" : "border-transparent"}`}
-            style={{ color: sidePanel === "graph" ? "var(--text-primary)" : "var(--text-muted)" }}
+            onClick={() => setRightTab("graph")}
+            style={{
+              display: "flex", alignItems: "center", gap: 5, height: "100%",
+              padding: "0 10px", fontSize: 11, fontWeight: 500,
+              border: "none", background: "transparent", cursor: "pointer",
+              borderBottom: `2px solid ${rightTab === "graph" ? "var(--accent)" : "transparent"}`,
+              color: rightTab === "graph" ? "var(--text-0)" : "var(--text-2)",
+              transition: "color 120ms cubic-bezier(0.23,1,0.32,1), border-color 120ms cubic-bezier(0.23,1,0.32,1)",
+            }}
           >
-            <Layers className="w-3 h-3" />
-            Dependency graph
+            <Graph size={12} weight="regular" /> Dependency graph
           </button>
-
-          <div className="ml-auto flex items-center gap-3">
-            {highlightedNodes.size > 0 && (
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+            {highlighted.size > 0 && (
               <button
-                onClick={() => setHighlightedNodes(new Set())}
-                className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1"
+                onClick={() => setHighlighted(new Set())}
+                style={{
+                  display: "flex", alignItems: "center", gap: 4,
+                  fontSize: 10, color: "var(--accent-text)", cursor: "pointer",
+                  background: "transparent", border: "none",
+                  fontFamily: "var(--font-geist-sans)",
+                }}
               >
-                <X className="w-2.5 h-2.5" /> Clear impact
+                <X size={10} weight="regular" /> Clear impact
               </button>
             )}
-            <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-              Click a node to analyse
-            </span>
+            <span style={{ fontSize: 10, color: "var(--text-2)" }}>Click node to analyse</span>
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 p-2">
+        <div style={{ flex: 1, minHeight: 0, padding: 8 }}>
           {graphData.nodes.length > 0 ? (
-            <GraphPanel
-              data={graphData}
-              onNodeClick={handleNodeClick}
-              highlightedNodes={highlightedNodes}
-            />
+            <GraphPanel data={graphData} onNodeClick={handleNodeClick} highlightedNodes={highlighted} />
           ) : (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-              <Layers className="w-8 h-8" style={{ color: "var(--text-muted)" }} />
-              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 10 }}>
+              <Graph size={28} weight="thin" style={{ color: "var(--text-2)" }} />
+              <p style={{ fontSize: 12, color: "var(--text-2)", textAlign: "center" }}>
                 {activeRepo
-                  ? activeRepo.status !== "ready"
-                    ? "Indexing repository…"
-                    : "Graph loading…"
-                  : "Select a repository to view the dependency graph."}
+                  ? activeRepo.status !== "ready" ? "Indexing repository" : "Loading graph"
+                  : "Select a repository to view the dependency graph"}
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Settings Modal ── */}
+      {/* ── Settings modal ── */}
       <AnimatePresence>
         {showSettings && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
-            onClick={(e) => e.target === e.currentTarget && setShowSettings(false)}
+            key="backdrop"
+            initial={rm ? {} : { opacity: 0 }}
+            animate={rm ? {} : { opacity: 1 }}
+            exit={rm ? {} : { opacity: 0 }}
+            transition={rm ? { duration: 0 } : { duration: 0.18, ease: EASE_OUT }}
+            onClick={e => e.target === e.currentTarget && setShowSettings(false)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 50,
+              display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+              background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
+            }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.94, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: 12 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
-              className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+              key="modal"
+              initial={rm ? {} : { opacity: 0, scale: 0.95, y: 10 }}
+              animate={rm ? {} : { opacity: 1, scale: 1, y: 0 }}
+              exit={rm ? {} : { opacity: 0, scale: 0.95, y: 10 }}
+              transition={rm ? { duration: 0 } : { duration: 0.22, ease: EASE_OUT }}
+              className="bezel"
+              style={{ width: "100%", maxWidth: 420, overflow: "hidden" }}
             >
-              <div
-                className="flex items-center justify-between px-5 py-4"
-                style={{ borderBottom: "1px solid var(--border)" }}
-              >
-                <div className="flex items-center gap-2">
-                  <Settings className="w-4 h-4 text-purple-400" />
-                  <h2 className="text-sm font-semibold">Settings</h2>
+              {/* Header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 16px", borderBottom: "1px solid var(--border-0)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Gear size={14} weight="regular" style={{ color: "var(--accent)" }} />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Settings</span>
                 </div>
                 <button
                   onClick={() => setShowSettings(false)}
-                  className="text-neutral-500 hover:text-white transition-colors"
+                  style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-2)", display: "flex", alignItems: "center" }}
                 >
-                  <X className="w-4 h-4" />
+                  <X size={15} weight="regular" />
                 </button>
               </div>
 
-              <div className="p-5 space-y-4">
+              {/* Body */}
+              <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
                 <div>
-                  <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-                    Groq API Key
+                  <label style={{ display: "block", fontSize: 11, fontWeight: 500, color: "var(--text-1)", marginBottom: 7 }}>
+                    Groq API key
                   </label>
                   <input
                     type="password"
                     value={groqKey}
-                    onChange={(e) => setGroqKey(e.target.value)}
-                    placeholder="gsk_…"
-                    className="w-full rounded-lg px-3 py-2 text-sm text-white
-                               focus:outline-none transition-colors"
+                    onChange={e => setGroqKey(e.target.value)}
+                    placeholder="gsk_..."
+                    className="bezel-inner"
                     style={{
-                      background: "var(--bg-hover)",
-                      border: "1px solid var(--border)",
+                      width: "100%", padding: "8px 11px", fontSize: 12,
+                      color: "var(--text-0)", border: "1px solid var(--border-0)",
+                      outline: "none", background: "rgba(0,0,0,0.25)",
+                      borderRadius: "var(--r2)", fontFamily: "var(--font-geist-mono)",
+                      transition: "border-color 120ms cubic-bezier(0.23,1,0.32,1)",
                     }}
-                    onFocus={(e) => (e.currentTarget.style.borderColor = "var(--border-focus)")}
-                    onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+                    onFocus={e => (e.currentTarget.style.borderColor = "var(--accent-border)")}
+                    onBlur={e => (e.currentTarget.style.borderColor = "var(--border-0)")}
                   />
-                  <p className="text-[10px] mt-2" style={{ color: "var(--text-muted)" }}>
-                    Your key is encrypted at rest with AES-256-GCM and only decrypted in-memory during inference.
+                  <p style={{ fontSize: 10, color: "var(--text-2)", marginTop: 7, lineHeight: 1.6 }}>
+                    Encrypted at rest with AES-256-GCM. Decrypted only in-memory during inference.
                   </p>
                 </div>
               </div>
 
-              <div
-                className="flex items-center justify-end gap-3 px-5 py-4"
-                style={{ borderTop: "1px solid var(--border)", background: "rgba(0,0,0,0.2)" }}
-              >
-                <button
-                  onClick={() => setShowSettings(false)}
-                  className="px-4 py-2 text-xs font-medium transition-colors hover:text-white"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Cancel
-                </button>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={handleSaveSettings}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-lg transition-colors"
-                >
-                  Save settings
-                </motion.button>
+              {/* Footer */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "10px 16px", borderTop: "1px solid var(--border-0)", background: "rgba(0,0,0,0.15)" }}>
+                <button className="btn-ghost" onClick={() => setShowSettings(false)}>Cancel</button>
+                <button className="btn-accent" onClick={saveSettings}>Save</button>
               </div>
             </motion.div>
           </motion.div>
