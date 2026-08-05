@@ -62,6 +62,9 @@ async def ingest_repository(
     repository_id: str,
     decrypted_token: str,
 ) -> dict:
+    import asyncio
+    await asyncio.sleep(0.1) # Yield control to flush HTTP response
+
     engine = create_engine(DATABASE_URL)
     db_factory = create_session_factory(engine)
     chunker = ASTChunker()
@@ -91,7 +94,9 @@ async def ingest_repository(
             tmp_dir   = tempfile.mkdtemp(prefix="nexus_clone_")
             log.info("Cloning repository", repo=repo.full_name, dest=tmp_dir)
 
-            git_repo = Repo.clone_from(
+            import asyncio
+            git_repo = await asyncio.to_thread(
+                Repo.clone_from,
                 clone_url,
                 tmp_dir,
                 depth=1,
@@ -115,8 +120,10 @@ async def ingest_repository(
                 try:
                     source = Path(fp).read_text(encoding="utf-8", errors="replace")
                     relative = fp[len(tmp_dir) + 1:]
-                    chunks   = chunker.chunk_file(relative, source)
+                    import asyncio
+                    chunks = await asyncio.to_thread(chunker.chunk_file, relative, source)
                     all_chunks.extend(chunks)
+                    await asyncio.sleep(0) # Yield control between files
                 except Exception as exc:
                     log.warning("Failed to chunk file", file=fp, error=str(exc))
 
