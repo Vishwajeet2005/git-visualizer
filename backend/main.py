@@ -574,8 +574,18 @@ async def refactor_diff(
 # ─── Health ───────────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
-async def health():
-    return {"status": "ok", "service": "nexus-api"}
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/api/test-bg")
+async def test_bg():
+    import asyncio
+    import time
+    def heavy_work():
+        time.sleep(10) # Simulate 10 seconds of blocking work
+    asyncio.create_task(asyncio.to_thread(heavy_work))
+    return {"status": "started", "service": "nexus-api"}
 
 
 # needed for oauth_state in the callback
