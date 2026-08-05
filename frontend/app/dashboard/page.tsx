@@ -672,8 +672,8 @@ export default function DashboardPage() {
   const fetchRepos = useCallback(async () => {
     try {
       const [dbRes, ghRes] = await Promise.all([
-        fetch(`${API}/api/repos`, { credentials: "include", headers: getHeaders() }),
-        fetch(`${API}/api/github/repos`, { credentials: "include", headers: getHeaders() }),
+        fetch(`/api/repos`, { credentials: "include", headers: getHeaders() }),
+        fetch(`/api/github/repos`, { credentials: "include", headers: getHeaders() }),
       ]);
       const db: Repository[] = dbRes.ok ? await dbRes.json() : [];
       const gh: GithubRepo[] = ghRes.ok ? await ghRes.json() : [];
@@ -710,8 +710,8 @@ export default function DashboardPage() {
     if (isImporting) return;
     setIsImporting(true);
     try {
-      // Use direct API request since CORS is now fully deployed on the backend
-      const r = await fetch(`${API}/api/repos`, {
+      // Use Vercel proxy to bypass all CORS issues
+      const r = await fetch(`/api/repos`, {
         method: "POST", credentials: "include", headers: getHeaders(),
         body: JSON.stringify({ full_name }),
       });
@@ -733,7 +733,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!activeRepo?.id) return;
     let live = true;
-    fetch(`${API}/api/repos/${activeRepo.id}/graph`, { credentials: "include", headers: getHeaders() })
+    fetch(`/api/repos/${activeRepo.id}/graph`, { credentials: "include", headers: getHeaders() })
       .then(r => r.json())
       .then((d: GraphData) => { if (live) setGraphData(d); })
       .catch(console.error);
@@ -743,7 +743,7 @@ export default function DashboardPage() {
   // ── Settings ─────────────────────────────────────────────────────────────────
   const saveSettings = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/api/user/key`, {
+      const r = await fetch(`/api/user/key`, {
         method: "POST", credentials: "include", headers: getHeaders(),
         body: JSON.stringify({ groq_api_key: groqKey }),
       });
@@ -769,7 +769,7 @@ export default function DashboardPage() {
     abortRef.current = ctrl;
 
     try {
-      const resp = await fetch(`${API}/api/query/stream`, {
+      const resp = await fetch(`/api/query/stream`, {
         method: "POST", credentials: "include", headers: getHeaders(), signal: ctrl.signal,
         body: JSON.stringify({ question: text, repository_id: activeRepo.id || "", provider: "groq" }),
       });
@@ -832,7 +832,7 @@ export default function DashboardPage() {
     if (!instr) return;
     setChatLoading(true);
     try {
-      const resp = await fetch(`${API}/api/tools/refactor-diff`, {
+      const resp = await fetch(`/api/tools/refactor-diff`, {
         method: "POST", credentials: "include", headers: getHeaders(),
         body: JSON.stringify({ repository_id: activeRepo.id || "", file_path: activeFile.path, symbol_name: activeFile.name, refactor_instruction: instr, provider: "groq" }),
       });
