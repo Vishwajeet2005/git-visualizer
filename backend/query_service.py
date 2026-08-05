@@ -27,12 +27,12 @@ InferenceProvider = Literal["groq", "anthropic", "ollama"]
 class EmbeddingService:
     def __init__(self, api_key: Optional[str] = None) -> None:
         self.model_name = "BAAI/bge-small-en-v1.5"
-        self._client = TextEmbedding(model_name=self.model_name, threads=2)
+        self._client = TextEmbedding(model_name=self.model_name, threads=1)
         self.dense_dim = 384
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         import asyncio
-        embeddings = await asyncio.to_thread(list, self._client.embed(texts, batch_size=16))
+        embeddings = await asyncio.to_thread(list, self._client.embed(texts, batch_size=4))
         return [list(emb) for emb in embeddings]
 
     async def embed_single(self, text: str) -> list[float]:

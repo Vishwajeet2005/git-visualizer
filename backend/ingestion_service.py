@@ -47,7 +47,7 @@ SUPPORTED_EXTENSIONS = frozenset({
 })
 
 MAX_FILE_SIZE_BYTES = 512 * 1024  # Skip files > 512 KB
-UPSERT_BATCH_SIZE   = 32          # Qdrant batch upsert size
+UPSERT_BATCH_SIZE   = 16          # Qdrant batch upsert size
 
 # ─── Main Ingestion Task ──────────────────────────────────────────────────────
 
@@ -136,6 +136,9 @@ async def ingest_repository(
 
             # ── Phase 4: Embed + index ────────────────────────────────────
             await _set_status(session, repo, RepoStatus.EMBEDDING.value)
+            
+            import gc
+            gc.collect()
 
             file_node_rows = await _embed_and_index(
                 embedder=embedder,
@@ -234,6 +237,9 @@ async def _embed_and_index(
     total_batches = (len(chunks) + UPSERT_BATCH_SIZE - 1) // UPSERT_BATCH_SIZE
 
     for batch_idx, batch_start in enumerate(range(0, len(chunks), UPSERT_BATCH_SIZE)):
+        import gc
+        gc.collect()
+        
         if session_status_callback:
             pct = int((batch_idx / total_batches) * 100) if total_batches > 0 else 100
             await session_status_callback(f"embedding ({pct}%)")
