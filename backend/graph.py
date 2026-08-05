@@ -45,10 +45,17 @@ class GraphDataOut(BaseModel):
 
 # ─── Route ────────────────────────────────────────────────────────────────────
 
+from backend.schema import db_session
+from typing import AsyncIterator
+
+async def get_db() -> AsyncIterator[AsyncSession]:
+    async with db_session() as session:
+        yield session
+
 @router.get("/{repo_id}/graph", response_model=GraphDataOut)
 async def get_repo_graph(
     repo_id: str,
-    db: AsyncSession = Depends(lambda: None),  # injected by app via Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> GraphDataOut:
     """
     Returns nodes (one per FileNode) and directed edges derived from
