@@ -11,7 +11,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from typing import AsyncIterator
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,11 +46,8 @@ class GraphDataOut(BaseModel):
 
 # ─── Route ────────────────────────────────────────────────────────────────────
 
-from backend.schema import db_session
-from typing import AsyncIterator
-
-async def get_db() -> AsyncIterator[AsyncSession]:
-    async with db_session() as session:
+async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
+    async with request.app.state.db_factory() as session:
         yield session
 
 @router.get("/{repo_id}/graph", response_model=GraphDataOut)
