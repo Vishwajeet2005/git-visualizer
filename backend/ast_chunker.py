@@ -212,9 +212,18 @@ def _split_into_sub_blocks(
         ))
 
         # Advance with overlap to maintain context continuity
+        if end_idx >= len(lines) - 1:
+            break
+
         overlap_lines = max(1, overlap // 8)  # approx 8 tokens per line average
-        start_idx = end_idx + 1 - overlap_lines
-        if start_idx <= 0:
+        next_start = end_idx + 1 - overlap_lines
+        
+        # Prevent going backwards or staying in place if token density is weird
+        if next_start <= start_idx:
+            next_start = start_idx + 1
+            
+        start_idx = next_start
+        if start_idx >= len(lines):
             break
 
     return chunks
