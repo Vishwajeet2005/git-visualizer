@@ -158,10 +158,11 @@ function FileTreeNode({
 
 // ── Repo selector ─────────────────────────────────────────────────────────────
 function RepoSelect({
-  repos, activeRepo, onSelect, isImporting,
+  repos, activeRepo, onSelect, isImporting, onDelete,
 }: {
   repos: MergedRepo[]; activeRepo: MergedRepo | null;
   onSelect: (r: MergedRepo) => void; isImporting: boolean;
+  onDelete: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -252,8 +253,7 @@ function RepoSelect({
                         onClick={(e) => {
                           e.stopPropagation();
                           if (confirm(`Delete repository ${r.full_name}?`)) {
-                            fetch(`/api/repos/${r.id}`, { method: "DELETE", credentials: "include", headers: getHeaders() })
-                              .then(() => window.location.reload());
+                            onDelete(r.id!);
                           }
                         }}
                         style={{ background: "transparent", border: "none", color: "var(--text-2)", cursor: "pointer", padding: 2 }}
@@ -761,6 +761,13 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const handleDeleteRepo = useCallback(async (id: string) => {
+    try {
+      await fetch(`/api/repos/${id}`, { method: "DELETE", credentials: "include", headers: getHeaders() });
+      window.location.reload();
+    } catch (e) { console.error(e); }
+  }, []);
+
   // ── Load graph ───────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!activeRepo?.id) return;
@@ -929,6 +936,7 @@ export default function DashboardPage() {
             activeRepo={activeRepo}
             onSelect={handleRepoSelect}
             isImporting={isImporting}
+            onDelete={handleDeleteRepo}
           />
 
           {activeRepo && (
