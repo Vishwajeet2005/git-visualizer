@@ -132,7 +132,7 @@ async def ingest_repository(
 
             repo.chunk_count  = len(all_chunks)
             repo.total_tokens = sum(c.token_count for c in all_chunks)
-            await session.flush()
+            await session.commit()
 
             # ── Phase 4: Embed + index ────────────────────────────────────
             await _set_status(session, repo, RepoStatus.EMBEDDING.value)
@@ -290,7 +290,7 @@ async def _set_status(
     repo.status = status
     if error:
         repo.error_message = error[:4096]
-    await session.flush()
+    await session.commit()
 
 
 def _build_clone_url(full_name: str, token: str) -> str:
