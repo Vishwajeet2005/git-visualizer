@@ -101,6 +101,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from backend.graph import router as graph_router
+app.include_router(graph_router)
+
 
 # ─── Dependencies ─────────────────────────────────────────────────────────────
 

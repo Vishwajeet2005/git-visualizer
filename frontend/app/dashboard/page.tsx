@@ -734,9 +734,15 @@ export default function DashboardPage() {
     if (!activeRepo?.id) return;
     let live = true;
     fetch(`/api/repos/${activeRepo.id}/graph`, { credentials: "include", headers: getHeaders() })
-      .then(r => r.json())
+      .then(async r => {
+        if (!r.ok) throw new Error("Failed to load graph");
+        return r.json();
+      })
       .then((d: GraphData) => { if (live) setGraphData(d); })
-      .catch(console.error);
+      .catch(err => {
+        console.error(err);
+        if (live) setGraphData({ nodes: [], links: [] });
+      });
     return () => { live = false; };
   }, [activeRepo]);
 
