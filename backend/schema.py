@@ -166,7 +166,7 @@ class Repository(Base):
     is_private: Mapped[bool]     = mapped_column(Boolean, default=False)
 
     status: Mapped[RepoStatus] = mapped_column(
-        Enum(RepoStatus), default=RepoStatus.PENDING, nullable=False
+        Enum(RepoStatus, native_enum=False, length=32), default=RepoStatus.PENDING, nullable=False
     )
     celery_task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     error_message: Mapped[Optional[str]]  = mapped_column(Text, nullable=True)
@@ -222,8 +222,8 @@ class FileNode(Base):
 
     # Source location
     file_path: Mapped[str]   = mapped_column(String(1024), nullable=False)
-    language: Mapped[Language] = mapped_column(Enum(Language), nullable=False)
-    node_type: Mapped[NodeType] = mapped_column(Enum(NodeType), nullable=False)
+    language: Mapped[Language] = mapped_column(Enum(Language, native_enum=False, length=32), nullable=False)
+    node_type: Mapped[NodeType] = mapped_column(Enum(NodeType, native_enum=False, length=32), nullable=False)
 
     # Symbol info
     name: Mapped[str]       = mapped_column(String(256), nullable=False)
@@ -312,7 +312,7 @@ class UserConversation(Base):
 
     title: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     provider: Mapped[InferenceProvider] = mapped_column(
-        Enum(InferenceProvider), nullable=False
+        Enum(InferenceProvider, native_enum=False, length=32), nullable=False
     )
     model_name: Mapped[str] = mapped_column(String(128), nullable=False)
 
