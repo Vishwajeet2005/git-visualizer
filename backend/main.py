@@ -453,6 +453,20 @@ async def get_repo(
     }
 
 
+@app.delete("/api/repos/{repo_id}")
+async def delete_repo(
+    repo_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    repo = await db.get(Repository, uuid.UUID(repo_id))
+    if not repo or repo.owner_id != user.id:
+        raise HTTPException(status_code=404)
+    await db.delete(repo)
+    await db.commit()
+    return {"status": "deleted"}
+
+
 # ─── Query / Chat Route (streaming SSE) ──────────────────────────────────────
 
 @app.post("/api/query/stream")

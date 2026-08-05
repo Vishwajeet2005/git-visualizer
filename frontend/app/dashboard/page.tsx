@@ -9,7 +9,7 @@ import {
   GitBranch, FolderOpen, FolderSimple, File, MagnifyingGlass,
   Lightning, Gear, PaperPlaneRight, ArrowsClockwise, Flask,
   Code, Rows, X, Check, Download, CircleNotch,
-  WarningCircle, Graph, ThumbsUp, ThumbsDown, Copy,
+  WarningCircle, Graph, ThumbsUp, ThumbsDown, Copy, Trash,
 } from "@phosphor-icons/react";
 
 // ── Dynamic imports ───────────────────────────────────────────────────────────
@@ -245,7 +245,23 @@ function RepoSelect({
                       {r.full_name.split("/")[0]}
                     </span>
                   </div>
-                  <StatusBadge status={r.status} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <StatusBadge status={r.status} />
+                    {r.status !== "unimported" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Delete repository ${r.full_name}?`)) {
+                            fetch(`/api/repos/${r.id}`, { method: "DELETE", credentials: "include", headers: getHeaders() })
+                              .then(() => window.location.reload());
+                          }
+                        }}
+                        style={{ background: "transparent", border: "none", color: "var(--text-2)", cursor: "pointer", padding: 2 }}
+                      >
+                        <Trash size={12} />
+                      </button>
+                    )}
+                  </div>
                 </button>
               ))}
             </div>
