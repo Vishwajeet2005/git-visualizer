@@ -165,8 +165,8 @@ class Repository(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_private: Mapped[bool]     = mapped_column(Boolean, default=False)
 
-    status: Mapped[RepoStatus] = mapped_column(
-        Enum(RepoStatus, native_enum=False, length=32), default=RepoStatus.PENDING, nullable=False
+    status: Mapped[str] = mapped_column(
+        String(32), default=RepoStatus.PENDING.value, nullable=False
     )
     celery_task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     error_message: Mapped[Optional[str]]  = mapped_column(Text, nullable=True)

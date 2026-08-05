@@ -88,7 +88,7 @@ async def ingest_repository(
 
         try:
             # ── Phase 1: Update status → CLONING ──────────────────────────
-            await _set_status(session, repo, RepoStatus.CLONING)
+            await _set_status(session, repo, RepoStatus.CLONING.value)
 
             clone_url = _build_clone_url(repo.full_name, decrypted_token)
             tmp_dir   = tempfile.mkdtemp(prefix="nexus_clone_")
@@ -102,7 +102,6 @@ async def ingest_repository(
                 depth=1,
                 single_branch=True,
                 branch=repo.default_branch,
-                kill_after_timeout=120,
             )
             last_sha = git_repo.head.commit.hexsha
             repo.last_commit_sha = last_sha
@@ -110,13 +109,13 @@ async def ingest_repository(
 
 
             # ── Phase 3: Parse + chunk all files ──────────────────────────
-            await _set_status(session, repo, RepoStatus.PARSING)
+            await _set_status(session, repo, RepoStatus.PARSING.value)
 
             all_chunks: list[CodeChunk] = []
             file_paths = _collect_files(tmp_dir)
             repo.file_count = len(file_paths)
 
-            for fp in file_paths:
+            for i, fp in enumerate(file_paths):
                 try:
                     source = Path(fp).read_text(encoding="utf-8", errors="replace")
                     relative = fp[len(tmp_dir) + 1:]
@@ -124,6 +123,10 @@ async def ingest_repository(
                     chunks = await asyncio.to_thread(chunker.chunk_file, relative, source)
                     all_chunks.extend(chunks)
                     await asyncio.sleep(0) # Yield control between files
+                    
+                    if i % 10 == 0 or i == len(file_paths) - 1:
+                        pct = int((i / len(file_paths)) * 100)
+                        await _set_status(session, repo, f"parsing ({pct}%)")
                 except Exception as exc:
                     log.warning("Failed to chunk file", file=fp, error=str(exc))
 
@@ -132,7 +135,7 @@ async def ingest_repository(
             await session.flush()
 
             # ── Phase 4: Embed + index ────────────────────────────────────
-            await _set_status(session, repo, RepoStatus.EMBEDDING)
+            await _set_status(session, repo, RepoStatus.EMBEDDING.value)
 
             file_node_rows = await _embed_and_index(
                 embedder=embedder,
@@ -140,6 +143,7 @@ async def ingest_repository(
                 repository_id=repository_id,
                 repo_uuid=repo_uuid,
                 last_sha=last_sha,
+                session_status_callback=lambda st: _set_status(session, repo, st),
             )
 
             session.add_all(file_node_rows)
@@ -180,7 +184,7 @@ async def ingest_repository(
 
             # ── Phase 5: Mark READY ───────────────────────────────────────
             from datetime import datetime, timezone
-            repo.status      = RepoStatus.READY
+            repo.status      = RepoStatus.READY.value
             repo.ingested_at = datetime.now(timezone.utc)
             await session.commit()
 
@@ -197,12 +201,12 @@ async def ingest_repository(
             }
 
         except GitCommandError as exc:
-            await _set_status(session, repo, RepoStatus.FAILED, str(exc))
+            await _set_status(session, repo, RepoStatus.FAILED.value, str(exc))
             await session.commit()
             raise
 
         except Exception as exc:
-            await _set_status(session, repo, RepoStatus.FAILED, str(exc))
+            await _set_status(session, repo, RepoStatus.FAILED.value, str(exc))
             await session.commit()
             raise
 
@@ -219,6 +223,7 @@ async def _embed_and_index(
     repository_id: str,
     repo_uuid: uuid.UUID,
     last_sha: str,
+    session_status_callback=None,
 ) -> list[FileNode]:
     """
     For each batch of chunks:
@@ -226,8 +231,13 @@ async def _embed_and_index(
     2. Build FileNode ORM rows for PostgreSQL.
     """
     file_node_rows: list[FileNode] = []
+    total_batches = (len(chunks) + UPSERT_BATCH_SIZE - 1) // UPSERT_BATCH_SIZE
 
-    for batch_start in range(0, len(chunks), UPSERT_BATCH_SIZE):
+    for batch_idx, batch_start in enumerate(range(0, len(chunks), UPSERT_BATCH_SIZE)):
+        if session_status_callback:
+            pct = int((batch_idx / total_batches) * 100) if total_batches > 0 else 100
+            await session_status_callback(f"embedding ({pct}%)")
+
         batch = chunks[batch_start:batch_start + UPSERT_BATCH_SIZE]
         texts = [c.raw_content for c in batch]
 

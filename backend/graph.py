@@ -64,10 +64,10 @@ async def get_repo_graph(
     repo = await db.get(Repository, repo_uuid)
     if repo is None:
         raise HTTPException(status_code=404, detail="Repository not found.")
-    if repo.status != RepoStatus.READY:
+    if repo.status != RepoStatus.READY.value:
         raise HTTPException(
             status_code=400,
-            detail=f"Repository graph not available — status: {repo.status.value}",
+            detail=f"Repository graph not available — status: {repo.status}",
         )
 
     stmt = select(FileNode).where(FileNode.repository_id == repo_uuid)

@@ -423,9 +423,8 @@ async def import_repo(
         await db.commit()
         await db.refresh(repo)
 
-    import asyncio
     task_id = "bg-" + str(uuid.uuid4())
-    asyncio.create_task(ingest_repository(str(repo.id), plain_token))
+    background_tasks.add_task(ingest_repository, str(repo.id), plain_token)
     repo.celery_task_id = task_id
     await db.commit()
 
@@ -444,7 +443,7 @@ async def get_repo(
     return {
         "id":             str(repo.id),
         "full_name":      repo.full_name,
-        "status":         repo.status.value,
+        "status":         repo.status,
         "chunk_count":    repo.chunk_count,
         "file_count":     repo.file_count,
         "total_tokens":   repo.total_tokens,
@@ -467,8 +466,8 @@ async def stream_query(
     repo = await db.get(Repository, uuid.UUID(body.repository_id))
     if not repo or repo.owner_id != user.id:
         raise HTTPException(status_code=404)
-    if repo.status != RepoStatus.READY:
-        raise HTTPException(status_code=400, detail=f"Repository not ready: {repo.status.value}")
+    if repo.status != RepoStatus.READY.value:
+        raise HTTPException(status_code=400, detail=f"Repository not ready: {repo.status}")
 
     api_key = get_user_groq_key(user)
     query_svc = QueryService(api_key=api_key)
