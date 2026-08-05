@@ -162,7 +162,7 @@ function RepoSelect({
 }: {
   repos: MergedRepo[]; activeRepo: MergedRepo | null;
   onSelect: (r: MergedRepo) => void; isImporting: boolean;
-  onDelete: (id: string) => void;
+  onDelete: (r: MergedRepo) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -252,9 +252,7 @@ function RepoSelect({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(`Delete repository ${r.full_name}?`)) {
-                            onDelete(r.id!);
-                          }
+                          onDelete(r);
                         }}
                         style={{ background: "transparent", border: "none", color: "var(--text-2)", cursor: "pointer", padding: 2 }}
                       >
@@ -681,6 +679,7 @@ export default function DashboardPage() {
   const [autoExplained, setAutoExplained] = useState<Set<string>>(new Set());
   const [showSettings, setShowSettings]   = useState(false);
   const [confirmImport, setConfirmImport] = useState<MergedRepo | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<MergedRepo | null>(null);
   const [groqKey, setGroqKey]         = useState("");
   const abortRef = useRef<AbortController | null>(null);
 
@@ -761,7 +760,11 @@ export default function DashboardPage() {
     }
   }, []);
 
-  const handleDeleteRepo = useCallback(async (id: string) => {
+  const handleDeleteRepo = useCallback(async (r: MergedRepo) => {
+    setConfirmDelete(r);
+  }, []);
+
+  const performDeleteRepo = useCallback(async (id: string) => {
     try {
       await fetch(`/api/repos/${id}`, { method: "DELETE", credentials: "include", headers: getHeaders() });
       window.location.reload();
@@ -1228,6 +1231,70 @@ export default function DashboardPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+        {/* Delete Confirm Modal */}
+        {confirmDelete && (
+          <motion.div
+            key="backdrop-delete"
+            initial={rm ? {} : { opacity: 0 }}
+            animate={rm ? {} : { opacity: 1 }}
+            exit={rm ? {} : { opacity: 0 }}
+            transition={rm ? { duration: 0 } : { duration: 0.18, ease: EASE_OUT }}
+            onClick={e => e.target === e.currentTarget && setConfirmDelete(null)}
+            style={{
+              position: "fixed", inset: 0, zIndex: 60,
+              display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+              background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
+            }}
+          >
+            <motion.div
+              key="modal-delete"
+              initial={rm ? {} : { opacity: 0, scale: 0.95, y: 10 }}
+              animate={rm ? {} : { opacity: 1, scale: 1, y: 0 }}
+              exit={rm ? {} : { opacity: 0, scale: 0.95, y: 10 }}
+              transition={rm ? { duration: 0 } : { duration: 0.22, ease: EASE_OUT }}
+              className="bezel"
+              style={{ width: "100%", maxWidth: 400, overflow: "hidden" }}
+            >
+              <div style={{ padding: "20px 24px" }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: "#ef4444", marginBottom: 8 }}>
+                  Delete Repository
+                </h3>
+                <p style={{ fontSize: 12, color: "var(--text-1)", lineHeight: 1.6 }}>
+                  Are you sure you want to delete <span style={{ color: "var(--text-0)", fontFamily: "var(--font-geist-mono)" }}>{confirmDelete.full_name}</span>?
+                  <br />
+                  This will remove the repository from your dashboard.
+                </p>
+              </div>
+              
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "12px 24px", borderTop: "1px solid var(--border-0)", background: "var(--bg-1)" }}>
+                <button 
+                  className="btn-ghost" 
+                  onClick={() => setConfirmDelete(null)}
+                  style={{ padding: "6px 14px", fontSize: 12, borderRadius: "var(--r2)" }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  style={{
+                    background: "#ef4444", color: "#fff", border: "none",
+                    padding: "6px 14px", fontSize: 12, fontWeight: 600, borderRadius: "var(--r2)",
+                    cursor: "pointer", transition: "opacity 100ms ease"
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = "0.9"}
+                  onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                  onClick={() => {
+                    performDeleteRepo(confirmDelete.id!);
+                    setConfirmDelete(null);
+                  }}
+                >
+                  Delete Repository
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </main>
     </div>
   );
 }
