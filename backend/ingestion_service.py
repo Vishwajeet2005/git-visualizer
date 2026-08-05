@@ -47,7 +47,7 @@ SUPPORTED_EXTENSIONS = frozenset({
 })
 
 MAX_FILE_SIZE_BYTES = 512 * 1024  # Skip files > 512 KB
-UPSERT_BATCH_SIZE   = 64          # Qdrant batch upsert size
+UPSERT_BATCH_SIZE   = 32          # Qdrant batch upsert size
 
 # ─── Main Ingestion Task ──────────────────────────────────────────────────────
 
