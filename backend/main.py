@@ -73,6 +73,14 @@ async def lifespan(app: FastAPI):
 
 # ─── App Instance ─────────────────────────────────────────────────────────────
 
+app = FastAPI(
+    title="Nexus Repository Context Engine",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+)
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     import traceback
@@ -83,14 +91,6 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"detail": str(exc), "traceback": traceback.format_exc()}
     )
-
-app = FastAPI(
-    title="Nexus Repository Context Engine",
-    version="1.0.0",
-    lifespan=lifespan,
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-)
 
 app.add_middleware(
     CORSMiddleware,
