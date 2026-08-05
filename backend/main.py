@@ -377,7 +377,7 @@ async def import_repo(
         Repository.owner_id == user.id,
         Repository.full_name == body.full_name,
     )
-    existing = (await db.execute(stmt)).scalar_one_or_none()
+    existing = (await db.execute(stmt)).scalars().first()
 
     if existing:
         if existing.status == RepoStatus.FAILED:
@@ -586,6 +586,12 @@ async def test_bg():
         time.sleep(10) # Simulate 10 seconds of blocking work
     asyncio.create_task(asyncio.to_thread(heavy_work))
     return {"status": "started", "service": "nexus-api"}
+
+
+@app.post("/api/test-crash")
+async def test_crash():
+    data = {}
+    return data["id"]
 
 
 # needed for oauth_state in the callback
