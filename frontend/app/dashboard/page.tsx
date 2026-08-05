@@ -697,11 +697,27 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchRepos().then(data => {
       if (data) {
-        const ready = data.find(r => r.status === "ready");
-        if (ready && !activeRepo) setActiveRepo(ready);
+        if (activeRepo) {
+          const updated = data.find(r => r.full_name === activeRepo.full_name);
+          if (updated && updated.status !== activeRepo.status) {
+            setActiveRepo(updated);
+          }
+        } else {
+          const ready = data.find(r => r.status === "ready");
+          if (ready) setActiveRepo(ready);
+        }
       }
     });
-    const iv = setInterval(fetchRepos, 4000);
+    const iv = setInterval(() => {
+      fetchRepos().then(data => {
+        if (data && activeRepo) {
+          const updated = data.find(r => r.full_name === activeRepo.full_name);
+          if (updated && updated.status !== activeRepo.status) {
+            setActiveRepo(updated);
+          }
+        }
+      });
+    }, 4000);
     return () => clearInterval(iv);
   }, [fetchRepos, activeRepo]);
 
