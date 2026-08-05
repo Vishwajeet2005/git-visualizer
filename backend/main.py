@@ -366,7 +366,7 @@ async def list_repos(
         {
             "id":             str(r.id),
             "full_name":      r.full_name,
-            "status":         r.status.value,
+            "status":         r.status,
             "chunk_count":    r.chunk_count,
             "file_count":     r.file_count,
             "ingested_at":    r.ingested_at.isoformat() if r.ingested_at else None,
@@ -394,8 +394,8 @@ async def import_repo(
     existing = (await db.execute(stmt)).scalars().first()
 
     if existing:
-        if existing.status == RepoStatus.FAILED:
-            existing.status        = RepoStatus.PENDING
+        if existing.status == RepoStatus.FAILED.value:
+            existing.status        = RepoStatus.PENDING.value
             existing.error_message = None
             await db.commit()
             repo = existing
