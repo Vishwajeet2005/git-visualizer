@@ -1232,7 +1232,8 @@ export default function DashboardPage() {
         )}
       </AnimatePresence>
 
-        {/* Delete Confirm Modal */}
+      {/* Delete Confirm Modal */}
+      <AnimatePresence>
         {confirmDelete && (
           <motion.div
             key="backdrop-delete"
@@ -1294,7 +1295,7 @@ export default function DashboardPage() {
             </motion.div>
           </motion.div>
         )}
-      </main>
+      </AnimatePresence>
     </div>
   );
 }
