@@ -86,6 +86,8 @@ async def get_repo_graph(
     links: list[GraphLinkOut] = []
     seen_links: set[tuple[str, str, str]] = set()
 
+    dir_nodes: dict[str, GraphNodeOut] = {}
+
     for fn in file_nodes:
         inward: list[str] = (fn.inward_callers or {}).get("items", [])
         val = max(1, 1 + len(inward))
@@ -98,6 +100,46 @@ async def get_repo_graph(
             language=fn.language.value,
             val=val,
         ))
+
+        # Synthesize structural directory/file nodes
+        parts = fn.file_path.strip("/").split("/")
+        current_path = ""
+        for i, part in enumerate(parts):
+            parent_path = current_path
+            current_path = f"{current_path}/{part}" if current_path else part
+            
+            if i < len(parts) - 1:
+                # Directory node
+                dir_id = f"dir:{current_path}"
+                if dir_id not in dir_nodes:
+                    dir_nodes[dir_id] = GraphNodeOut(
+                        id=dir_id, name=part, file_path=current_path,
+                        node_type="directory", language="text", val=2,
+                    )
+                if parent_path:
+                    key = (f"dir:{parent_path}", dir_id, "structure")
+                    if key not in seen_links:
+                        seen_links.add(key)
+                        links.append(GraphLinkOut(source=f"dir:{parent_path}", target=dir_id, type="structure"))
+            else:
+                # File structural node
+                file_id = f"file:{current_path}"
+                if file_id not in dir_nodes:
+                    dir_nodes[file_id] = GraphNodeOut(
+                        id=file_id, name=part, file_path=current_path,
+                        node_type="file", language=fn.language.value, val=2,
+                    )
+                    if parent_path:
+                        key = (f"dir:{parent_path}", file_id, "structure")
+                        if key not in seen_links:
+                            seen_links.add(key)
+                            links.append(GraphLinkOut(source=f"dir:{parent_path}", target=file_id, type="structure"))
+                
+                # Link file structural node to actual AST chunk node
+                key = (file_id, str(fn.id), "structure")
+                if key not in seen_links:
+                    seen_links.add(key)
+                    links.append(GraphLinkOut(source=file_id, target=str(fn.id), type="structure"))
 
         # Outward call edges (function → function)
         calls: list[str] = (fn.outward_calls or {}).get("items", [])
@@ -129,5 +171,7 @@ async def get_repo_graph(
                         target=target_id,
                         type="import",
                     ))
+
+    nodes.extend(dir_nodes.values())
 
     return GraphDataOut(nodes=nodes, links=links)

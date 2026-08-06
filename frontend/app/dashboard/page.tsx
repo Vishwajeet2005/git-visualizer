@@ -383,27 +383,20 @@ function ChatPanel({
               animate={rm ? {} : { opacity: 1, y: 0 }}
               transition={rm ? { duration: 0 } : { duration: 0.22, ease: EASE_OUT }}
               style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}
-            >
-              {msg.role === "assistant" && (
-                <div style={{
-                  width: 22, height: 22, borderRadius: "var(--r2)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: "var(--accent-dim)", border: "1px solid var(--accent-border)",
-                  marginRight: 8, marginTop: 2, flexShrink: 0,
-                }}>
-                  <Lightning size={11} weight="regular" style={{ color: "var(--accent)" }} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, width: "100%" }}>
+                <div style={{ fontSize: 10, fontFamily: "var(--font-geist-mono)", color: "var(--text-2)", alignSelf: msg.role === "user" ? "flex-end" : "flex-start" }}>
+                  {msg.role === "user" ? "// USER" : "// ASSISTANT"}
                 </div>
-              )}
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: "82%" }}>
                 <div
-                  className={msg.role === "user" ? "" : "bezel-inner"}
                   style={{
                     padding: "9px 13px",
-                    borderRadius: msg.role === "user" ? "var(--r3)" : "var(--r2)",
+                    border: "1px solid var(--border-0)",
+                    background: msg.role === "user" ? "var(--bg-1)" : "var(--bg-0)",
+                    borderRadius: 0,
                     fontSize: 12, lineHeight: 1.65,
-                    ...(msg.role === "user"
-                      ? { background: "var(--accent-dim)", border: "1px solid var(--accent-border)", color: "var(--accent-text)" }
-                      : { color: "var(--text-1)" }),
+                    color: "var(--text-1)",
+                    alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+                    maxWidth: "90%",
                   }}
                 >
                   <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", wordBreak: "break-word", margin: 0 }}>
@@ -429,18 +422,16 @@ function ChatPanel({
         </AnimatePresence>
 
         {loading && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{
-              width: 22, height: 22, borderRadius: "var(--r2)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              background: "var(--accent-dim)", border: "1px solid var(--accent-border)", flexShrink: 0,
-            }}>
-              <Lightning size={11} weight="regular" style={{ color: "var(--accent)" }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, width: "100%" }}>
+            <div style={{ fontSize: 10, fontFamily: "var(--font-geist-mono)", color: "var(--text-2)", alignSelf: "flex-start" }}>
+              // ASSISTANT
             </div>
-            <div className="bezel-inner" style={{ padding: "10px 14px", display: "flex", gap: 5, alignItems: "center" }}>
-              <span className="typing-dot" />
-              <span className="typing-dot" />
-              <span className="typing-dot" />
+            <div style={{ padding: "9px 13px", border: "1px solid var(--border-0)", background: "var(--bg-0)", borderRadius: 0, alignSelf: "flex-start" }}>
+              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                <span className="typing-dot" style={{ opacity: 0.5 }} />
+                <span className="typing-dot" style={{ opacity: 0.5 }} />
+                <span className="typing-dot" style={{ opacity: 0.5 }} />
+              </div>
             </div>
           </div>
         )}
@@ -448,7 +439,7 @@ function ChatPanel({
       </div>
 
       {/* Input */}
-      <div style={{ borderTop: "1px solid var(--border-0)", flexShrink: 0, background: "var(--bg-0)" }}>
+      <div style={{ borderTop: "1px solid var(--border-0)", flexShrink: 0, background: "var(--bg-1)" }}>
         <div style={{ display: "flex", alignItems: "flex-end", padding: "10px 14px", gap: 8 }}>
           <textarea
             value={input}
@@ -456,32 +447,29 @@ function ChatPanel({
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
             }}
-            placeholder="Ask about the codebase..."
+            placeholder="Awaiting prompt..."
             rows={1}
             style={{
               flex: 1, resize: "none", background: "transparent",
               color: "var(--text-0)", fontSize: 13, lineHeight: 1.6,
               border: "none", outline: "none",
               maxHeight: 112, overflowY: "auto",
-              fontFamily: "var(--font-geist-sans)",
+              fontFamily: "var(--font-geist-mono)",
             }}
           />
           <button
             onClick={onSend}
             disabled={!input.trim() || loading}
-            className="btn-ghost"
-            style={{ flexShrink: 0, padding: "6px", color: input.trim() ? "var(--text-0)" : "var(--text-2)" }}
+            style={{ 
+              flexShrink: 0, padding: "6px",
+              background: "transparent", border: "none", cursor: "pointer",
+              color: input.trim() ? "var(--text-0)" : "var(--border-0)" 
+            }}
           >
             {loading
               ? <CircleNotch size={14} weight="regular" className="animate-spin" />
               : <PaperPlaneRight size={14} weight="regular" />}
           </button>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 14px 10px", fontSize: 10, color: "var(--text-2)" }}>
-          <span>Enter to send, Shift+Enter for newline</span>
-          <span style={{ display: "flex", alignItems: "center", gap: 4, opacity: 0.8 }}>
-            <WarningCircle size={10} weight="regular" /> AI can make mistakes.
-          </span>
         </div>
       </div>
     </div>
@@ -819,7 +807,7 @@ export default function DashboardPage() {
     try {
       const resp = await fetch(`/api/query/stream`, {
         method: "POST", credentials: "include", headers: getHeaders(), signal: ctrl.signal,
-        body: JSON.stringify({ question: text, repository_id: activeRepo.id || "", provider: "groq" }),
+        body: JSON.stringify({ question: text, repository_id: activeRepo.id || "", provider: "groq", groq_api_key: process.env.NEXT_PUBLIC_GROQ_API_KEY }),
       });
       const reader = resp.body!.getReader();
       const dec = new TextDecoder();
@@ -882,7 +870,7 @@ export default function DashboardPage() {
     try {
       const resp = await fetch(`/api/tools/refactor-diff`, {
         method: "POST", credentials: "include", headers: getHeaders(),
-        body: JSON.stringify({ repository_id: activeRepo.id || "", file_path: activeFile.path, symbol_name: activeFile.name, refactor_instruction: instr, provider: "groq" }),
+        body: JSON.stringify({ repository_id: activeRepo.id || "", file_path: activeFile.path, symbol_name: activeFile.name, refactor_instruction: instr, provider: "groq", groq_api_key: process.env.NEXT_PUBLIC_GROQ_API_KEY }),
       });
       const reader = resp.body!.getReader();
       const dec = new TextDecoder();

@@ -160,6 +160,7 @@ class QueryRequest(BaseModel):
     repository_id: str
     provider: InferenceProvider = "groq"
     system_prompt: Optional[str] = None
+    groq_api_key: Optional[str] = None
 
 
 class TestGenRequest(BaseModel):
@@ -167,6 +168,7 @@ class TestGenRequest(BaseModel):
     file_path: str
     symbol_name: str
     provider: InferenceProvider = "groq"
+    groq_api_key: Optional[str] = None
 
 
 class DiffRequest(BaseModel):
@@ -175,6 +177,7 @@ class DiffRequest(BaseModel):
     symbol_name: str
     refactor_instruction: str
     provider: InferenceProvider = "groq"
+    groq_api_key: Optional[str] = None
 
 class UserKeyRequest(BaseModel):
     groq_api_key: str
@@ -483,7 +486,7 @@ async def stream_query(
     if repo.status != RepoStatus.READY.value:
         raise HTTPException(status_code=400, detail=f"Repository not ready: {repo.status}")
 
-    api_key = get_user_groq_key(user)
+    api_key = body.groq_api_key or get_user_groq_key(user)
     query_svc = QueryService(api_key=api_key)
 
     async def token_stream():
@@ -535,7 +538,7 @@ async def generate_tests(
         "Use pytest for Python, Jest/Vitest for TypeScript/JavaScript."
     )
 
-    api_key = get_user_groq_key(user)
+    api_key = body.groq_api_key or get_user_groq_key(user)
     query_svc = QueryService(api_key=api_key)
 
     async def stream():
@@ -580,7 +583,7 @@ async def refactor_diff(
         f"Instruction: {body.refactor_instruction}"
     )
 
-    api_key = get_user_groq_key(user)
+    api_key = body.groq_api_key or get_user_groq_key(user)
     query_svc = QueryService(api_key=api_key)
 
     async def stream():
