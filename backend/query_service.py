@@ -106,7 +106,7 @@ class AgenticInferenceEngine:
         @tool
         async def search_codebase(query: str, repository_id: str) -> str:
             """Searches the codebase for snippets matching the query."""
-            results = await search_svc.search(query, repository_id)
+            results = await search_svc.search(query, repository_id, final_k=4)
             if not results:
                 return "No results found."
             parts = []
@@ -121,7 +121,9 @@ class AgenticInferenceEngine:
                 stmt = text("SELECT raw_content FROM file_nodes WHERE repository_id = :repo_id AND file_path = :file_path LIMIT 1")
                 result = await session.execute(stmt, {"repo_id": uuid.UUID(repository_id), "file_path": file_path})
                 row = result.mappings().first()
-                if row: return row["raw_content"]
+                if row:
+                    content = row["raw_content"]
+                    return content[:12000] + "... (truncated)" if len(content) > 12000 else content
                 return "File not found."
 
         @tool
@@ -140,7 +142,7 @@ class AgenticInferenceEngine:
                 return f"Symbol: {symbol_name}\nCallers (uses this symbol): {inward_list}\nCalls (this symbol uses): {outward_list}"
         
         self.tools = [search_codebase, read_file, get_symbol_graph]
-        self.llm = ChatGroq(model=OPENAI_MODEL, groq_api_key=api_key, max_tokens=2048)
+        self.llm = ChatGroq(model=OPENAI_MODEL, groq_api_key=api_key, max_tokens=1024)
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         
         graph_builder = StateGraph(AgentState)
