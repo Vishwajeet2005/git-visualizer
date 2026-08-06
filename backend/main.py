@@ -542,7 +542,7 @@ async def generate_tests(
     query_svc = QueryService(api_key=api_key)
 
     async def stream():
-        gen = await query_svc.query(
+        gen = query_svc.query(
             question=question,
             collection_name=repo.vector_collection,
             repository_id=body.repository_id,
@@ -587,7 +587,7 @@ async def refactor_diff(
     query_svc = QueryService(api_key=api_key)
 
     async def stream():
-        gen = await query_svc.query(
+        gen = query_svc.query(
             question=question,
             collection_name=repo.vector_collection,
             repository_id=body.repository_id,
