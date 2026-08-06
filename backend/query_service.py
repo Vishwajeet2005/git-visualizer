@@ -15,7 +15,7 @@ from langchain_core.tools import tool
 
 log = structlog.get_logger(__name__)
 
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "llama3-8b-8192")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "openai/gpt-oss-120b")
 raw_url = os.environ.get("DATABASE_URL", "postgresql+asyncpg://nexus:nexus@localhost:5432/nexus")
 if raw_url.startswith("postgres://"):
     raw_url = raw_url.replace("postgres://", "postgresql+asyncpg://", 1)
