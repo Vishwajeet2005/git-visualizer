@@ -50,10 +50,11 @@ class PostgresSearchService:
         
         async with self.db_factory() as session:
             stmt = text("""
-                SELECT id, file_path, name, start_line, end_line, element_type, raw_content, 
-                       (dense_vector <=> :embedding) AS distance
-                FROM vector_chunks
-                WHERE repository_id = :repo_id
+                SELECT v.id, v.file_path, v.name, f.start_line, f.end_line, v.element_type, v.raw_content, 
+                       (v.dense_vector <=> :embedding) AS distance
+                FROM vector_chunks v
+                JOIN file_nodes f ON v.file_node_id = f.id
+                WHERE v.repository_id = :repo_id
                 ORDER BY distance ASC
                 LIMIT :limit
             """)
