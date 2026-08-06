@@ -383,6 +383,7 @@ function ChatPanel({
               animate={rm ? {} : { opacity: 1, y: 0 }}
               transition={rm ? { duration: 0 } : { duration: 0.22, ease: EASE_OUT }}
               style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}
+            >
               <div style={{ display: "flex", flexDirection: "column", gap: 4, width: "100%" }}>
                 <div style={{ fontSize: 10, fontFamily: "var(--font-geist-mono)", color: "var(--text-2)", alignSelf: msg.role === "user" ? "flex-end" : "flex-start" }}>
                   {msg.role === "user" ? "// USER" : "// ASSISTANT"}
