@@ -440,31 +440,37 @@ function ChatPanel({
       </div>
 
       {/* Input */}
-      <div style={{ borderTop: "1px solid var(--border-0)", flexShrink: 0, background: "var(--bg-1)" }}>
-        <div style={{ display: "flex", alignItems: "flex-end", padding: "10px 14px", gap: 8 }}>
+      <div style={{ flexShrink: 0, padding: "14px", background: "var(--bg-0)" }}>
+        <div style={{ 
+          display: "flex", alignItems: "flex-end", gap: 8,
+          background: "var(--bg-1)", border: "1px solid var(--border-0)", 
+          borderRadius: "var(--r2)", padding: "10px 14px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+        }}>
           <textarea
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
             }}
-            placeholder="Awaiting prompt..."
+            placeholder="Ask about the codebase..."
             rows={1}
             style={{
               flex: 1, resize: "none", background: "transparent",
               color: "var(--text-0)", fontSize: 13, lineHeight: 1.6,
               border: "none", outline: "none",
               maxHeight: 112, overflowY: "auto",
-              fontFamily: "var(--font-geist-mono)",
+              fontFamily: "var(--font-geist-sans)",
             }}
           />
           <button
             onClick={onSend}
             disabled={!input.trim() || loading}
             style={{ 
-              flexShrink: 0, padding: "6px",
+              flexShrink: 0, padding: "4px",
               background: "transparent", border: "none", cursor: "pointer",
-              color: input.trim() ? "var(--text-0)" : "var(--border-0)" 
+              color: input.trim() ? "var(--text-0)" : "var(--text-2)",
+              display: "flex", alignItems: "center", justifyContent: "center"
             }}
           >
             {loading

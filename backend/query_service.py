@@ -88,56 +88,7 @@ class PostgresSearchService:
                 
             return final_results
 
-@tool
-async def search_codebase(query: str, repository_id: str) -> str:
-    """Searches the codebase for snippets matching the query."""
-    search_svc = search_codebase.search_svc
-    results = await search_svc.search(query, repository_id)
-    if not results:
-        return "No results found."
-    
-    parts = []
-    for r in results:
-        parts.append(f"### {r['file_path']}:{r['start_line']}-{r['end_line']} [{r['element_type']}: {r['name']}]\n{r['chunk_content']}\n")
-    return "\n".join(parts)
 
-@tool
-async def read_file(file_path: str, repository_id: str) -> str:
-    """Reads the full content of a file from the codebase given its path."""
-    search_svc = read_file.search_svc
-    async with search_svc.db_factory() as session:
-        stmt = text("""
-            SELECT raw_content FROM file_nodes 
-            WHERE repository_id = :repo_id AND file_path = :file_path 
-            LIMIT 1
-        """)
-        result = await session.execute(stmt, {"repo_id": uuid.UUID(repository_id), "file_path": file_path})
-        row = result.mappings().first()
-        if row:
-            return row["raw_content"]
-        return "File not found."
-
-@tool
-async def get_symbol_graph(symbol_name: str, repository_id: str) -> str:
-    """Gets the callers (upstream) and calls (downstream) of a specific function or class."""
-    search_svc = get_symbol_graph.search_svc
-    async with search_svc.db_factory() as session:
-        stmt = text("""
-            SELECT inward_callers, outward_calls FROM vector_chunks
-            WHERE repository_id = :repo_id AND name = :name
-            LIMIT 1
-        """)
-        result = await session.execute(stmt, {"repo_id": uuid.UUID(repository_id), "name": symbol_name})
-        row = result.mappings().first()
-        if not row:
-            return f"Symbol {symbol_name} not found."
-        
-        inward = row.get("inward_callers") or {}
-        outward = row.get("outward_calls") or {}
-        inward_list = inward.get("items", []) if isinstance(inward, dict) else []
-        outward_list = outward.get("items", []) if isinstance(outward, dict) else []
-        
-        return f"Symbol: {symbol_name}\nCallers (uses this symbol): {inward_list}\nCalls (this symbol uses): {outward_list}"
 
 from typing import Annotated, TypedDict
 from langgraph.graph.message import add_messages
@@ -151,9 +102,41 @@ class AgenticInferenceEngine:
         self.search_svc = search_svc
         self.api_key = api_key
         
-        search_codebase.search_svc = search_svc
-        read_file.search_svc = search_svc
-        get_symbol_graph.search_svc = search_svc
+        @tool
+        async def search_codebase(query: str, repository_id: str) -> str:
+            """Searches the codebase for snippets matching the query."""
+            results = await search_svc.search(query, repository_id)
+            if not results:
+                return "No results found."
+            parts = []
+            for r in results:
+                parts.append(f"### {r['file_path']}:{r['start_line']}-{r['end_line']} [{r['element_type']}: {r['name']}]\n{r['chunk_content']}\n")
+            return "\n".join(parts)
+
+        @tool
+        async def read_file(file_path: str, repository_id: str) -> str:
+            """Reads the full content of a file from the codebase given its path."""
+            async with search_svc.db_factory() as session:
+                stmt = text("SELECT raw_content FROM file_nodes WHERE repository_id = :repo_id AND file_path = :file_path LIMIT 1")
+                result = await session.execute(stmt, {"repo_id": uuid.UUID(repository_id), "file_path": file_path})
+                row = result.mappings().first()
+                if row: return row["raw_content"]
+                return "File not found."
+
+        @tool
+        async def get_symbol_graph(symbol_name: str, repository_id: str) -> str:
+            """Gets the callers (upstream) and calls (downstream) of a specific function or class."""
+            async with search_svc.db_factory() as session:
+                stmt = text("SELECT inward_callers, outward_calls FROM vector_chunks WHERE repository_id = :repo_id AND name = :name LIMIT 1")
+                result = await session.execute(stmt, {"repo_id": uuid.UUID(repository_id), "name": symbol_name})
+                row = result.mappings().first()
+                if not row: return f"Symbol {symbol_name} not found."
+                
+                inward = row.get("inward_callers") or {}
+                outward = row.get("outward_calls") or {}
+                inward_list = inward.get("items", []) if isinstance(inward, dict) else []
+                outward_list = outward.get("items", []) if isinstance(outward, dict) else []
+                return f"Symbol: {symbol_name}\nCallers (uses this symbol): {inward_list}\nCalls (this symbol uses): {outward_list}"
         
         self.tools = [search_codebase, read_file, get_symbol_graph]
         self.llm = ChatGroq(model=OPENAI_MODEL, api_key=api_key)
