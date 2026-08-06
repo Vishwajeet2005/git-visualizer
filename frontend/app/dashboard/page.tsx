@@ -582,7 +582,7 @@ function GraphPanel({
           if (hoverNode && (s === hoverNode.id || t === hoverNode.id)) return 1.2;
           return highlightedNodes.has(s) ? 2 : 0.25;
         }}
-        linkDirectionalParticles={2}
+        linkDirectionalParticles={(l: any) => l.type === "structure" ? 0 : 2}
         linkDirectionalParticleWidth={1.2}
         linkDirectionalParticleSpeed={(l: any) => l.type === "import" ? 0.004 : 0.008}
         linkDirectionalArrowLength={3}
