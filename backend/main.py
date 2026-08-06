@@ -490,7 +490,7 @@ async def stream_query(
     query_svc = QueryService(api_key=api_key)
 
     async def token_stream():
-        gen = await query_svc.query(
+        gen = query_svc.query(
             question=body.question,
             collection_name=repo.vector_collection,
             repository_id=body.repository_id,
