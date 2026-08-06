@@ -139,7 +139,7 @@ class AgenticInferenceEngine:
                 return f"Symbol: {symbol_name}\nCallers (uses this symbol): {inward_list}\nCalls (this symbol uses): {outward_list}"
         
         self.tools = [search_codebase, read_file, get_symbol_graph]
-        self.llm = ChatGroq(model=OPENAI_MODEL, api_key=api_key)
+        self.llm = ChatGroq(model=OPENAI_MODEL, groq_api_key=api_key)
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         
         graph_builder = StateGraph(AgentState)
