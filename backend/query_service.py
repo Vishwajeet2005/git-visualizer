@@ -12,6 +12,7 @@ from backend.reranker import RerankerService
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, END
 from langchain_core.tools import StructuredTool
+from langchain_core.runnables import RunnableConfig
 
 log = structlog.get_logger(__name__)
 
@@ -132,8 +133,9 @@ class AgenticInferenceEngine:
         graph_builder.set_entry_point("chatbot")
         self.graph = graph_builder.compile()
 
-    async def search_codebase(self, query: str, repository_id: str) -> str:
+    async def search_codebase(self, query: str, config: RunnableConfig) -> str:
         """Searches the codebase for snippets matching the query."""
+        repository_id = config["configurable"]["repository_id"]
         results = await self.search_svc.search(query, repository_id, final_k=4)
         if not results:
             return "No results found."
@@ -142,8 +144,9 @@ class AgenticInferenceEngine:
             parts.append(f"### {r['file_path']}:{r['start_line']}-{r['end_line']} [{r['element_type']}: {r['name']}]\n{r['chunk_content']}\n")
         return "\n".join(parts)
 
-    async def read_file(self, file_path: str, repository_id: str) -> str:
+    async def read_file(self, file_path: str, config: RunnableConfig) -> str:
         """Reads the full content of a file from the codebase given its path."""
+        repository_id = config["configurable"]["repository_id"]
         async with self.search_svc.db_factory() as session:
             stmt = text("SELECT raw_content FROM file_nodes WHERE repository_id = :repo_id AND file_path = :file_path LIMIT 1")
             result = await session.execute(stmt, {"repo_id": uuid.UUID(repository_id), "file_path": file_path})
@@ -153,8 +156,9 @@ class AgenticInferenceEngine:
                 return content[:12000] + "... (truncated)" if len(content) > 12000 else content
             return "File not found."
 
-    async def get_symbol_graph(self, symbol_name: str, repository_id: str) -> str:
+    async def get_symbol_graph(self, symbol_name: str, config: RunnableConfig) -> str:
         """Gets the callers (upstream) and calls (downstream) of a specific function or class."""
+        repository_id = config["configurable"]["repository_id"]
         async with self.search_svc.db_factory() as session:
             stmt = text("SELECT inward_callers, outward_calls FROM vector_chunks WHERE repository_id = :repo_id AND name = :name LIMIT 1")
             result = await session.execute(stmt, {"repo_id": uuid.UUID(repository_id), "name": symbol_name})
@@ -180,7 +184,7 @@ class AgenticInferenceEngine:
         return "__end__"
         
     async def stream(self, question: str, repository_id: str, system_prompt: str) -> AsyncIterator[str]:
-        sp = f"{system_prompt}\nCRITICAL: When calling tools, you MUST provide repository_id='{repository_id}' as an argument."
+        sp = f"{system_prompt}\nCRITICAL: You MUST NOT call the same tool with the same arguments more than once. If a tool fails or returns no results, try a different approach or answer the user directly."
         messages = [
             SystemMessage(content=sp),
             HumanMessage(content=question)
@@ -188,6 +192,7 @@ class AgenticInferenceEngine:
         
         async for event in self.graph.astream_events(
             {"messages": messages, "repository_id": repository_id},
+            config={"configurable": {"repository_id": repository_id}, "recursion_limit": 15},
             version="v2"
         ):
             kind = event["event"]
