@@ -11,7 +11,7 @@ from backend.schema import create_engine, create_session_factory
 from backend.reranker import RerankerService
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, END
-from langchain_core.tools import tool
+from langchain_core.tools import StructuredTool
 
 log = structlog.get_logger(__name__)
 
@@ -103,45 +103,11 @@ class AgenticInferenceEngine:
         self.search_svc = search_svc
         self.api_key = api_key
         
-        @tool
-        async def search_codebase(query: str, repository_id: str) -> str:
-            """Searches the codebase for snippets matching the query."""
-            results = await search_svc.search(query, repository_id, final_k=4)
-            if not results:
-                return "No results found."
-            parts = []
-            for r in results:
-                parts.append(f"### {r['file_path']}:{r['start_line']}-{r['end_line']} [{r['element_type']}: {r['name']}]\n{r['chunk_content']}\n")
-            return "\n".join(parts)
-
-        @tool
-        async def read_file(file_path: str, repository_id: str) -> str:
-            """Reads the full content of a file from the codebase given its path."""
-            async with search_svc.db_factory() as session:
-                stmt = text("SELECT raw_content FROM file_nodes WHERE repository_id = :repo_id AND file_path = :file_path LIMIT 1")
-                result = await session.execute(stmt, {"repo_id": uuid.UUID(repository_id), "file_path": file_path})
-                row = result.mappings().first()
-                if row:
-                    content = row["raw_content"]
-                    return content[:12000] + "... (truncated)" if len(content) > 12000 else content
-                return "File not found."
-
-        @tool
-        async def get_symbol_graph(symbol_name: str, repository_id: str) -> str:
-            """Gets the callers (upstream) and calls (downstream) of a specific function or class."""
-            async with search_svc.db_factory() as session:
-                stmt = text("SELECT inward_callers, outward_calls FROM vector_chunks WHERE repository_id = :repo_id AND name = :name LIMIT 1")
-                result = await session.execute(stmt, {"repo_id": uuid.UUID(repository_id), "name": symbol_name})
-                row = result.mappings().first()
-                if not row: return f"Symbol {symbol_name} not found."
-                
-                inward = row.get("inward_callers") or {}
-                outward = row.get("outward_calls") or {}
-                inward_list = inward.get("items", []) if isinstance(inward, dict) else []
-                outward_list = outward.get("items", []) if isinstance(outward, dict) else []
-                return f"Symbol: {symbol_name}\nCallers (uses this symbol): {inward_list}\nCalls (this symbol uses): {outward_list}"
-        
-        self.tools = [search_codebase, read_file, get_symbol_graph]
+        self.tools = [
+            StructuredTool.from_function(coroutine=self.search_codebase),
+            StructuredTool.from_function(coroutine=self.read_file),
+            StructuredTool.from_function(coroutine=self.get_symbol_graph),
+        ]
         self.llm = ChatGroq(model=OPENAI_MODEL, groq_api_key=api_key, max_tokens=1024)
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         
@@ -165,6 +131,41 @@ class AgenticInferenceEngine:
         graph_builder.add_edge("tools", "chatbot")
         graph_builder.set_entry_point("chatbot")
         self.graph = graph_builder.compile()
+
+    async def search_codebase(self, query: str, repository_id: str) -> str:
+        """Searches the codebase for snippets matching the query."""
+        results = await self.search_svc.search(query, repository_id, final_k=4)
+        if not results:
+            return "No results found."
+        parts = []
+        for r in results:
+            parts.append(f"### {r['file_path']}:{r['start_line']}-{r['end_line']} [{r['element_type']}: {r['name']}]\n{r['chunk_content']}\n")
+        return "\n".join(parts)
+
+    async def read_file(self, file_path: str, repository_id: str) -> str:
+        """Reads the full content of a file from the codebase given its path."""
+        async with self.search_svc.db_factory() as session:
+            stmt = text("SELECT raw_content FROM file_nodes WHERE repository_id = :repo_id AND file_path = :file_path LIMIT 1")
+            result = await session.execute(stmt, {"repo_id": uuid.UUID(repository_id), "file_path": file_path})
+            row = result.mappings().first()
+            if row:
+                content = row["raw_content"]
+                return content[:12000] + "... (truncated)" if len(content) > 12000 else content
+            return "File not found."
+
+    async def get_symbol_graph(self, symbol_name: str, repository_id: str) -> str:
+        """Gets the callers (upstream) and calls (downstream) of a specific function or class."""
+        async with self.search_svc.db_factory() as session:
+            stmt = text("SELECT inward_callers, outward_calls FROM vector_chunks WHERE repository_id = :repo_id AND name = :name LIMIT 1")
+            result = await session.execute(stmt, {"repo_id": uuid.UUID(repository_id), "name": symbol_name})
+            row = result.mappings().first()
+            if not row: return f"Symbol {symbol_name} not found."
+            
+            inward = row.get("inward_callers") or {}
+            outward = row.get("outward_calls") or {}
+            inward_list = inward.get("items", []) if isinstance(inward, dict) else []
+            outward_list = outward.get("items", []) if isinstance(outward, dict) else []
+            return f"Symbol: {symbol_name}\nCallers (uses this symbol): {inward_list}\nCalls (this symbol uses): {outward_list}"
 
     def route_tools(self, state: AgentState):
         if isinstance(state, list):
