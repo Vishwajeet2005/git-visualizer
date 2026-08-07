@@ -38,6 +38,7 @@ from backend.query_service import QueryService, InferenceProvider
 from fastapi import BackgroundTasks
 from backend.ingestion_service import ingest_repository
 from backend.security import CredentialPurgeService, RateLimiter, TokenEncryptor
+from backend.graph import get_graph
 
 log = structlog.get_logger(__name__)
 

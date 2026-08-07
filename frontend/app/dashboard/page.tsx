@@ -775,10 +775,44 @@ export default function DashboardPage() {
         if (!r.ok) throw new Error("Failed to load graph");
         return r.json();
       })
-      .then((d: GraphData) => { if (live) setGraphData(d); })
+      .then((d: GraphData) => { 
+        if (live) {
+          setGraphData(d);
+          const tree: FileNode[] = [];
+          const map = new Map<string, FileNode>();
+          
+          d.nodes.forEach(n => {
+            if (n.node_type === "directory" || n.node_type === "file") {
+              const fnode: FileNode = { id: n.id, name: n.name, language: n.language, children: n.node_type === "directory" ? [] : undefined };
+              map.set(n.file_path, fnode);
+            }
+          });
+          
+          d.nodes.forEach(n => {
+            if (n.node_type === "directory" || n.node_type === "file") {
+              const fnode = map.get(n.file_path)!;
+              const parts = n.file_path.split("/");
+              if (parts.length > 1) {
+                const parentPath = parts.slice(0, -1).join("/");
+                const parent = map.get(parentPath);
+                if (parent && parent.children) parent.children.push(fnode);
+              } else {
+                tree.push(fnode);
+              }
+            } else {
+              const parentFile = map.get(n.file_path);
+              if (parentFile) {
+                if (!parentFile.children) parentFile.children = [];
+                parentFile.children.push({ id: n.id, name: n.name, language: n.language });
+              }
+            }
+          });
+          setFileTree(tree);
+        } 
+      })
       .catch(err => {
         console.error(err);
-        if (live) setGraphData({ nodes: [], links: [] });
+        if (live) { setGraphData({ nodes: [], links: [] }); setFileTree([]); }
       });
     return () => { live = false; };
   }, [activeRepo]);
