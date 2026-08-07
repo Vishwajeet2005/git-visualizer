@@ -96,8 +96,8 @@ async def get_repo_graph(
             id=str(fn.id),
             name=fn.name,
             file_path=fn.file_path,
-            node_type=fn.node_type.value,
-            language=fn.language.value,
+            node_type=getattr(fn.node_type, "value", fn.node_type),
+            language=getattr(fn.language, "value", fn.language),
             val=val,
         ))
 
@@ -127,7 +127,7 @@ async def get_repo_graph(
                 if file_id not in dir_nodes:
                     dir_nodes[file_id] = GraphNodeOut(
                         id=file_id, name=part, file_path=current_path,
-                        node_type="file", language=fn.language.value, val=2,
+                        node_type="file", language=getattr(fn.language, "value", fn.language), val=2,
                     )
                     if parent_path:
                         key = (f"dir:{parent_path}", file_id, "structure")
