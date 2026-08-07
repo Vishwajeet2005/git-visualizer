@@ -783,7 +783,8 @@ export default function DashboardPage() {
           
           d.nodes.forEach(n => {
             if (n.node_type === "directory" || n.node_type === "file") {
-              const fnode: FileNode = { id: n.id, name: n.name, path: n.file_path, type: n.node_type, language: n.language, children: n.node_type === "directory" ? [] : undefined };
+              const fnode: FileNode = { id: n.id, name: n.name, path: n.file_path, type: n.node_type, language: n.language };
+              if (n.node_type === "directory") fnode.children = [];
               map.set(n.file_path, fnode);
             }
           });
