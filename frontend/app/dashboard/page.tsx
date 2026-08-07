@@ -30,7 +30,7 @@ const SPRING = { type: "spring", duration: 0.4, bounce: 0.1 } as const;
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface FileNode {
   id: string; name: string; path: string;
-  type: "file" | "directory"; children?: FileNode[]; language?: string;
+  type: string; children?: FileNode[]; language?: string;
 }
 interface GraphNode {
   id: string; name: string; file_path: string;
@@ -783,7 +783,7 @@ export default function DashboardPage() {
           
           d.nodes.forEach(n => {
             if (n.node_type === "directory" || n.node_type === "file") {
-              const fnode: FileNode = { id: n.id, name: n.name, language: n.language, children: n.node_type === "directory" ? [] : undefined };
+              const fnode: FileNode = { id: n.id, name: n.name, path: n.file_path, type: n.node_type, language: n.language, children: n.node_type === "directory" ? [] : undefined };
               map.set(n.file_path, fnode);
             }
           });
@@ -803,7 +803,7 @@ export default function DashboardPage() {
               const parentFile = map.get(n.file_path);
               if (parentFile) {
                 if (!parentFile.children) parentFile.children = [];
-                parentFile.children.push({ id: n.id, name: n.name, language: n.language });
+                parentFile.children.push({ id: n.id, name: n.name, path: n.file_path, type: n.node_type, language: n.language });
               }
             }
           });
